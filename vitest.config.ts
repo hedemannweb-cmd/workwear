@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
-const alias = { "@": fileURLToPath(new URL("./src", import.meta.url)) };
+const alias = {
+  "@": fileURLToPath(new URL("./src", import.meta.url)),
+  // "server-only" wirft außerhalb von React Server Components – in Tests durch ein leeres Modul ersetzen
+  "server-only": fileURLToPath(new URL("./tests/stubs/server-only.ts", import.meta.url)),
+};
 
 export default defineConfig({
   resolve: { alias },
