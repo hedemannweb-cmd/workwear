@@ -1,0 +1,62 @@
+{
+  "name": "arbeitskleidung",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@tanstack/react-table": "^9.2.4",
+    "better-auth": "^1.7.6",
+    "dotenv": "^18.0.3",
+    "lucide-react": "^1.48.0",
+    "next": "16.3.6",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hook-form": "^7.88.0",
+    "server-only": "^0.0.1",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "prettier": "^3.9.9",
+    "prisma": "^7.10.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}

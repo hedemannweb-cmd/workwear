@@ -1,0 +1,789 @@
+// Datenmodell Arbeitskleidungsverwaltung – siehe docs/KONZEPT.md, Abschnitt D.
+//
+// Grundregeln:
+// - Alle Relationen auf Bewegungsdaten sind onDelete: Restrict. Historie verschwindet nie per Cascade.
+// - Stammdaten werden deaktiviert (active = false), nicht gelöscht.
+// - Constraints, die Prisma nicht ausdrücken kann (CHECK, partielle UNIQUE, Trigram-Indizes,
+//   Sequenzen, Audit-Schutz), liegen als handgeschriebenes SQL in der Migration "*_constraints".
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Identität & Rechte ─────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  RESPONSIBLE
+}
+
+model User {
+  id                      String   @id @default(cuid(2))
+  name                    String
+  email                   String   @unique
+  emailVerified           Boolean  @default(false)
+  image                   String?
+  role                    Role     @default(RESPONSIBLE)
+  active                  Boolean  @default(true)
+  /// true: Benutzer sieht nur Mitarbeiter der Abteilungen aus UserDepartmentScope
+  restrictedToDepartments Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  sessions          Session[]
+  accounts          Account[]
+  departmentScopes  UserDepartmentScope[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  issuesCreated     ClothingIssue[]           @relation("IssueIssuedBy")
+  issuesCancelled   ClothingIssue[]           @relation("IssueCancelledBy")
+  returnsReceived   ClothingReturn[]
+  adjustments       EmployeeQuotaAdjustment[]
+  reservations      EmployeeReservation[]     @relation("ReservationCreatedBy")
+  ordersCreated     Order[]
+  goodsReceipts     GoodsReceipt[]
+  movements         InventoryMovement[]
+  departmentChanges EmployeeDepartmentHistory[]
+  quotaRules        QuotaRule[]
+  settings          AppSetting[]
+}
+
+// Better-Auth-Tabellen (Feldnamen vom Adapter vorgegeben)
+model Session {
+  id        String   @id @default(cuid(2))
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid(2))
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid(2))
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model UserDepartmentScope {
+  userId       String
+  departmentId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@id([userId, departmentId])
+  @@index([departmentId])
+}
+
+// ───────────────────────────── Organisation & Mitarbeiter ─────────────────────────────
+
+model Department {
+  id             String        @id @default(cuid(2))
+  code           String        @unique
+  name           String
+  quotaProfileId String?
+  quotaProfile   QuotaProfile? @relation(fields: [quotaProfileId], references: [id], onDelete: Restrict)
+  costCenter     String?
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  employees      Employee[]
+  history        EmployeeDepartmentHistory[]
+  userScopes     UserDepartmentScope[]
+  issueSnapshots ClothingIssue[]
+
+  @@index([quotaProfileId])
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  LEFT
+}
+
+model Employee {
+  id             String         @id @default(cuid(2))
+  employeeNumber String         @unique
+  firstName      String
+  lastName       String
+  departmentId   String
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  entryDate      DateTime       @db.Date
+  exitDate       DateTime?      @db.Date
+  status         EmployeeStatus @default(ACTIVE)
+  notes          String?
+  /// gesetzt, wenn personenbezogene Daten nach Ablauf der Aufbewahrungsfrist ersetzt wurden
+  pseudonymizedAt DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  departmentHistory EmployeeDepartmentHistory[]
+  sizes             EmployeeSize[]
+  adjustments       EmployeeQuotaAdjustment[]
+  issues            ClothingIssue[]
+  returns           ClothingReturn[]
+  reservations      EmployeeReservation[]
+  quotaLocks        QuotaYearLock[]
+
+  @@index([departmentId])
+  @@index([lastName, firstName])
+  @@index([status])
+  @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Employee_lastName_trgm")
+  @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Employee_firstName_trgm")
+  @@index([employeeNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "Employee_employeeNumber_trgm")
+}
+
+model EmployeeDepartmentHistory {
+  id           String     @id @default(cuid(2))
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  validFrom    DateTime   @db.Date
+  /// exklusiv: gültig bis zum Vortag dieses Datums; NULL = aktuell
+  validTo      DateTime?  @db.Date
+  changedById  String?
+  changedBy    User?      @relation(fields: [changedById], references: [id], onDelete: Restrict)
+  reason       String?
+  createdAt    DateTime   @default(now())
+
+  @@index([employeeId, validFrom])
+  @@index([departmentId])
+}
+
+/// Mitarbeitergröße je Größenskala, optional je Kategorie überschrieben (z. B. Jacke XXL statt XL).
+model EmployeeSize {
+  id          String            @id @default(cuid(2))
+  employeeId  String
+  employee    Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sizeScaleId String
+  sizeScale   SizeScale         @relation(fields: [sizeScaleId], references: [id], onDelete: Restrict)
+  categoryId  String?
+  category    ClothingCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  sizeId      String
+  size        Size              @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  updatedAt   DateTime          @updatedAt
+
+  /// in der SQL-Migration als NULLS NOT DISTINCT angelegt (categoryId NULL = Standardgröße der Skala)
+  @@unique([employeeId, sizeScaleId, categoryId], map: "EmployeeSize_employee_scale_category_key")
+  @@index([employeeId])
+}
+
+// ───────────────────────────── Artikel & Lieferanten ─────────────────────────────
+
+model SizeScale {
+  id        String  @id @default(cuid(2))
+  code      String  @unique
+  name      String
+  sortOrder Int     @default(0)
+
+  sizes         Size[]
+  categories    ClothingCategory[]
+  employeeSizes EmployeeSize[]
+}
+
+model Size {
+  id          String    @id @default(cuid(2))
+  sizeScaleId String
+  sizeScale   SizeScale @relation(fields: [sizeScaleId], references: [id], onDelete: Restrict)
+  value       String
+  sortOrder   Int
+
+  variants      ArticleVariant[]
+  employeeSizes EmployeeSize[]
+
+  @@unique([sizeScaleId, value])
+}
+
+model ClothingCategory {
+  id          String     @id @default(cuid(2))
+  name        String     @unique
+  sizeScaleId String?
+  sizeScale   SizeScale? @relation(fields: [sizeScaleId], references: [id], onDelete: Restrict)
+  sortOrder   Int        @default(0)
+  active      Boolean    @default(true)
+
+  articles      Article[]
+  employeeSizes EmployeeSize[]
+}
+
+/// Das, worauf sich ein Kontingent bezieht (BDR-1), z. B. "T-Shirt". Artikel erfüllen eine Gruppe.
+model QuotaGroup {
+  id              String  @id @default(cuid(2))
+  code            String  @unique
+  name            String
+  /// false: Artikel dieser Gruppe werden ohne Kontingentprüfung ausgegeben (BDR-2)
+  isQuotaRelevant Boolean @default(true)
+  sortOrder       Int     @default(0)
+  active          Boolean @default(true)
+
+  articles     Article[]
+  rules        QuotaRule[]
+  adjustments  EmployeeQuotaAdjustment[]
+  issueItems   ClothingIssueItem[]
+  reservations EmployeeReservation[]
+}
+
+model Article {
+  id           String           @id @default(cuid(2))
+  sku          String           @unique
+  name         String
+  description  String?
+  categoryId   String
+  category     ClothingCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  quotaGroupId String
+  quotaGroup   QuotaGroup       @relation(fields: [quotaGroupId], references: [id], onDelete: Restrict)
+  manufacturer String?
+  active       Boolean          @default(true)
+  isStockItem  Boolean          @default(true)
+  imageUrl     String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  variants  ArticleVariant[]
+  suppliers ArticleSupplier[]
+
+  @@index([categoryId])
+  @@index([quotaGroupId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_name_trgm")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_sku_trgm")
+}
+
+model ArticleVariant {
+  id         String  @id @default(cuid(2))
+  articleId  String
+  article    Article @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  variantSku String  @unique
+  sizeId     String?
+  size       Size?   @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  color      String?
+  barcode    String?
+  minStock   Int?
+  active     Boolean @default(true)
+
+  inventory     Inventory[]
+  movements     InventoryMovement[]
+  issueItems    ClothingIssueItem[]
+  reservations  EmployeeReservation[]
+  orderItems    OrderItem[]
+  receiptItems  GoodsReceiptItem[]
+
+  /// in der SQL-Migration als NULLS NOT DISTINCT angelegt; UNIQUE(barcode) WHERE NOT NULL ebenfalls dort
+  @@unique([articleId, sizeId, color], map: "ArticleVariant_article_size_color_key")
+  @@index([articleId])
+  @@index([variantSku(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleVariant_variantSku_trgm")
+  @@index([barcode])
+}
+
+model Supplier {
+  id             String   @id @default(cuid(2))
+  supplierNumber String   @unique
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  website        String?
+  notes          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  articles      ArticleSupplier[]
+  orders        Order[]
+  goodsReceipts GoodsReceipt[]
+}
+
+model ArticleSupplier {
+  articleId     String
+  article       Article  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierSku   String?
+  purchasePrice Decimal? @db.Decimal(12, 2)
+  leadTimeDays  Int?
+  isPreferred   Boolean  @default(false)
+
+  // partieller UNIQUE(articleId) WHERE isPreferred: SQL-Migration
+  @@id([articleId, supplierId])
+  @@index([supplierId])
+}
+
+// ───────────────────────────── Kontingente ─────────────────────────────
+
+enum EntryRule {
+  FULL
+  PRORATED
+  MANUAL
+}
+
+model QuotaProfile {
+  id        String     @id @default(cuid(2))
+  code      String     @unique
+  name      String
+  /// überschreibt die globale Einstellung quota.entryRule, falls gesetzt
+  entryRule EntryRule?
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  rules       QuotaRule[]
+  departments Department[]
+}
+
+/// Jahresanspruch je Profil und Gruppe, versioniert über validFromYear/validToYear.
+model QuotaRule {
+  id              String       @id @default(cuid(2))
+  quotaProfileId  String
+  quotaProfile    QuotaProfile @relation(fields: [quotaProfileId], references: [id], onDelete: Restrict)
+  quotaGroupId    String
+  quotaGroup      QuotaGroup   @relation(fields: [quotaGroupId], references: [id], onDelete: Restrict)
+  validFromYear   Int
+  validToYear     Int?
+  quantityPerYear Int
+  createdById     String?
+  createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime     @default(now())
+
+  @@unique([quotaProfileId, quotaGroupId, validFromYear])
+  @@index([quotaGroupId])
+}
+
+enum AdjustmentSource {
+  MANUAL
+  OVERRIDE
+  IMPORT
+}
+
+model EmployeeQuotaAdjustment {
+  id             String           @id @default(cuid(2))
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  quotaGroupId   String
+  quotaGroup     QuotaGroup       @relation(fields: [quotaGroupId], references: [id], onDelete: Restrict)
+  year           Int
+  quantityDelta  Int
+  reason         String
+  source         AdjustmentSource @default(MANUAL)
+  relatedIssueId String?
+  relatedIssue   ClothingIssue?   @relation(fields: [relatedIssueId], references: [id], onDelete: Restrict)
+  createdById    String
+  createdBy      User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime         @default(now())
+
+  @@index([employeeId, year])
+  @@index([quotaGroupId])
+}
+
+/// Reine Sperrzeile: serialisiert alle kontingentwirksamen Vorgänge je Mitarbeiter und Jahr (KONZEPT E.4).
+model QuotaYearLock {
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  year       Int
+
+  @@id([employeeId, year])
+}
+
+// ───────────────────────────── Ausgabe & Rückgabe ─────────────────────────────
+
+enum IssueStatus {
+  COMPLETED
+  CANCELLED
+}
+
+model ClothingIssue {
+  id                   String      @id @default(cuid(2))
+  issueNumber          String      @unique
+  employeeId           String
+  employee             Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  departmentIdSnapshot String
+  departmentSnapshot   Department  @relation(fields: [departmentIdSnapshot], references: [id], onDelete: Restrict)
+  issuedAt             DateTime    @default(now())
+  issuedById           String
+  issuedBy             User        @relation("IssueIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+  status               IssueStatus @default(COMPLETED)
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelledBy          User?       @relation("IssueCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  cancelReason         String?
+  clientRequestId      String      @unique
+  notes                String?
+
+  items       ClothingIssueItem[]
+  adjustments EmployeeQuotaAdjustment[]
+
+  @@index([employeeId, issuedAt])
+  @@index([issuedAt])
+  @@index([status])
+}
+
+model ClothingIssueItem {
+  id                    String              @id @default(cuid(2))
+  issueId               String
+  issue                 ClothingIssue       @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  articleVariantId      String
+  articleVariant        ArticleVariant      @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  inventoryLocationId   String
+  inventoryLocation     InventoryLocation   @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  quantity              Int
+  /// Snapshots: Gruppe und Kontingentjahr werden festgeschrieben, nicht abgeleitet
+  quotaGroupId          String
+  quotaGroup            QuotaGroup          @relation(fields: [quotaGroupId], references: [id], onDelete: Restrict)
+  quotaYear             Int
+  quotaRelevant         Boolean
+  unitCost              Decimal?            @db.Decimal(12, 2)
+  reservationId         String?             @unique
+  reservation           EmployeeReservation? @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  /// gesetzt bei Umtausch: die Rückgabeposition, deren Gutschrift diese Ausgabe ausgleicht
+  exchangeOfReturnItemId String?            @unique
+  exchangeOfReturnItem   ClothingReturnItem? @relation("ExchangeIssue", fields: [exchangeOfReturnItemId], references: [id], onDelete: Restrict)
+
+  returnItems ClothingReturnItem[] @relation("ReturnedIssueItem")
+
+  @@index([issueId])
+  @@index([quotaGroupId, quotaYear])
+  @@index([articleVariantId])
+}
+
+enum ReturnType {
+  RETURN_TO_STOCK
+  EXCHANGE
+  DEFECTIVE
+  WRITE_OFF
+}
+
+model ClothingReturn {
+  id           String   @id @default(cuid(2))
+  returnNumber String   @unique
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  returnedAt   DateTime @default(now())
+  receivedById String
+  receivedBy   User     @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  clientRequestId String @unique
+  notes        String?
+
+  items ClothingReturnItem[]
+
+  @@index([employeeId, returnedAt])
+}
+
+model ClothingReturnItem {
+  id                  String             @id @default(cuid(2))
+  returnId            String
+  return              ClothingReturn     @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  issueItemId         String
+  issueItem           ClothingIssueItem  @relation("ReturnedIssueItem", fields: [issueItemId], references: [id], onDelete: Restrict)
+  quantity            Int
+  returnType          ReturnType
+  /// aus der Rückgabeart abgeleitet und festgeschrieben (BDR-5)
+  quotaCreditQuantity Int
+  inventoryLocationId String?
+  inventoryLocation   InventoryLocation? @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  reason              String?
+
+  exchangeIssueItem ClothingIssueItem? @relation("ExchangeIssue")
+
+  @@index([returnId])
+  @@index([issueItemId])
+}
+
+// ───────────────────────────── Lager ─────────────────────────────
+
+enum LocationType {
+  STORAGE
+  DEFECTIVE
+}
+
+model InventoryLocation {
+  id        String       @id @default(cuid(2))
+  code      String       @unique
+  name      String
+  type      LocationType @default(STORAGE)
+  isDefault Boolean      @default(false)
+  active    Boolean      @default(true)
+
+  inventory     Inventory[]
+  movements     InventoryMovement[]
+  issueItems    ClothingIssueItem[]
+  returnItems   ClothingReturnItem[]
+  reservations  EmployeeReservation[]
+  receiptItems  GoodsReceiptItem[]
+}
+
+/// Projektion des Bewegungsjournals. Wird ausschließlich zusammen mit einer InventoryMovement geändert.
+model Inventory {
+  id                  String            @id @default(cuid(2))
+  articleVariantId    String
+  articleVariant      ArticleVariant    @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  inventoryLocationId String
+  inventoryLocation   InventoryLocation @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  physicalQuantity    Int               @default(0)
+  reservedQuantity    Int               @default(0)
+  minStock            Int?
+  version             Int               @default(0)
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([articleVariantId, inventoryLocationId])
+  @@index([inventoryLocationId])
+}
+
+enum MovementType {
+  RECEIPT
+  ISSUE
+  ISSUE_CANCELLATION
+  RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT
+  INVENTORY_COUNT
+  RESERVE
+  UNRESERVE
+}
+
+enum MovementReference {
+  CLOTHING_ISSUE
+  CLOTHING_RETURN
+  GOODS_RECEIPT
+  RESERVATION
+  INVENTORY_ADJUSTMENT
+  TRANSFER
+  IMPORT
+}
+
+model InventoryMovement {
+  id                  String            @id @default(cuid(2))
+  articleVariantId    String
+  articleVariant      ArticleVariant    @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  inventoryLocationId String
+  inventoryLocation   InventoryLocation @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  type                MovementType
+  /// Änderung des physischen Bestands (vorzeichenbehaftet)
+  quantityDelta       Int
+  /// Änderung des reservierten Bestands (vorzeichenbehaftet)
+  reservedDelta       Int               @default(0)
+  physicalAfter       Int
+  reservedAfter       Int
+  referenceType       MovementReference
+  referenceId         String
+  transferGroupId     String?
+  userId              String
+  user                User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reason              String?
+  createdAt           DateTime          @default(now())
+
+  @@index([articleVariantId, createdAt])
+  @@index([inventoryLocationId])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+}
+
+// ───────────────────────────── Beschaffung ─────────────────────────────
+
+enum ReservationStatus {
+  PENDING
+  ORDERED
+  RECEIVED
+  ISSUED
+  CANCELLED
+}
+
+model EmployeeReservation {
+  id                  String             @id @default(cuid(2))
+  employeeId          String
+  employee            Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  articleVariantId    String
+  articleVariant      ArticleVariant     @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  quotaGroupId        String
+  quotaGroup          QuotaGroup         @relation(fields: [quotaGroupId], references: [id], onDelete: Restrict)
+  quotaYear           Int
+  quantity            Int
+  status              ReservationStatus  @default(PENDING)
+  orderItemId         String?
+  orderItem           OrderItem?         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  /// gesetzt, sobald eingetroffene Ware reserviert eingelagert ist
+  inventoryLocationId String?
+  inventoryLocation   InventoryLocation? @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  splitFromId         String?
+  splitFrom           EmployeeReservation?  @relation("ReservationSplit", fields: [splitFromId], references: [id], onDelete: Restrict)
+  splits              EmployeeReservation[] @relation("ReservationSplit")
+  clientRequestId     String?            @unique
+  notes               String?
+  createdById         String
+  createdBy           User               @relation("ReservationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt           DateTime           @default(now())
+  receivedAt          DateTime?
+  cancelledAt         DateTime?
+  cancelReason        String?
+
+  issueItem ClothingIssueItem?
+
+  @@index([employeeId, quotaYear, status])
+  @@index([status])
+  @@index([orderItemId])
+  @@index([articleVariantId])
+}
+
+enum OrderStatus {
+  DRAFT
+  ORDERED
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model Order {
+  id                   String      @id @default(cuid(2))
+  orderNumber          String      @unique
+  supplierId           String
+  supplier             Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  orderDate            DateTime?   @db.Date
+  expectedDeliveryDate DateTime?   @db.Date
+  status               OrderStatus @default(DRAFT)
+  notes                String?
+  createdById          String
+  createdBy            User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  cancelledAt          DateTime?
+  cancelReason         String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  items         OrderItem[]
+  goodsReceipts GoodsReceipt[]
+
+  @@index([status])
+  @@index([supplierId])
+  @@index([expectedDeliveryDate])
+  @@index([createdAt])
+  @@index([orderNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "Order_orderNumber_trgm")
+}
+
+model OrderItem {
+  id               String         @id @default(cuid(2))
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  articleVariantId String
+  articleVariant   ArticleVariant @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  quantityOrdered  Int
+  quantityReceived Int            @default(0)
+  unitPrice        Decimal        @db.Decimal(12, 2)
+
+  reservations EmployeeReservation[]
+  receiptItems GoodsReceiptItem[]
+
+  @@unique([orderId, articleVariantId])
+  @@index([articleVariantId])
+}
+
+model GoodsReceipt {
+  id                 String   @id @default(cuid(2))
+  receiptNumber      String   @unique
+  orderId            String?
+  order              Order?   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  supplierId         String
+  supplier           Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  receivedAt         DateTime @default(now())
+  receivedById       String
+  receivedBy         User     @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  deliveryNoteNumber String?
+  clientRequestId    String   @unique
+  notes              String?
+
+  items GoodsReceiptItem[]
+
+  @@index([orderId])
+  @@index([receivedAt])
+}
+
+model GoodsReceiptItem {
+  id                  String            @id @default(cuid(2))
+  goodsReceiptId      String
+  goodsReceipt        GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  orderItemId         String?
+  orderItem           OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  articleVariantId    String
+  articleVariant      ArticleVariant    @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  inventoryLocationId String
+  inventoryLocation   InventoryLocation @relation(fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+  quantity            Int
+
+  @@index([goodsReceiptId])
+  @@index([orderItemId])
+}
+
+// ───────────────────────────── Querschnitt ─────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid(2))
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([action])
+}
+
+model Notification {
+  id        String    @id @default(cuid(2))
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+  updatedAt   DateTime @updatedAt
+}
