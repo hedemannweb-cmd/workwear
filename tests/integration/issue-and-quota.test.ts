@@ -345,3 +345,32 @@ describe("Abteilungswechsel und Jahreswechsel", () => {
     expect((await quotaLine(emp.id, world.groups.shirt.id)).base).toBe(3);
   });
 });
+
+describe("Kontingentregeln pflegen", () => {
+  it("vergangene Jahre sind unveränderlich, neue Version begrenzt die Vorgängerregel", async () => {
+    const { setQuotaRule } = await import("@/modules/quotas/server/admin");
+    await expect(
+      setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR - 1, quantityPerYear: 9, reason: "Rückwirkend ändern" }),
+    ).rejects.toThrow(/vergangener Jahre/);
+
+    await setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8, reason: "Neue Regel ab nächstem Jahr" });
+    const rules = await db.quotaRule.findMany({ where: { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id }, orderBy: { validFromYear: "asc" } });
+    expect(rules.map((r) => [r.validFromYear, r.validToYear, r.quantityPerYear])).toEqual([
+      [2020, YEAR, 5],
+      [YEAR + 1, null, 8],
+    ]);
+    const emp = await makeEmployee(world.departments.prod.id);
+    expect((await quotaLine(emp.id, world.groups.shirt.id, YEAR)).base).toBe(5);
+    expect((await quotaLine(emp.id, world.groups.shirt.id, YEAR + 1)).base).toBe(8);
+    expect(await db.auditLog.count({ where: { action: "QUOTA_RULE_CHANGED" } })).toBe(1);
+  });
+
+  it("MANAGER darf keine Regeln ändern", async () => {
+    const { setQuotaRule } = await import("@/modules/quotas/server/admin");
+    const manager = await makeActor("MANAGER");
+    await expectDomainError(
+      setQuotaRule(manager, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8, reason: "nicht erlaubt" }),
+      "FORBIDDEN",
+    );
+  });
+});

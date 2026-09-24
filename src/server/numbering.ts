@@ -1,5 +1,5 @@
 import "server-only";
-import { currentYear } from "@/lib/dates";
+import { yearInAppTz } from "@/lib/dates";
 import type { Tx } from "./tx";
 
 /**
@@ -15,10 +15,11 @@ const SEQUENCES = {
 
 export type DocumentKind = keyof typeof SEQUENCES;
 
-export async function nextDocumentNumber(tx: Tx, kind: DocumentKind): Promise<string> {
+/** `documentDate`: Belegdatum (z. B. bei übernommenen historischen Ausgaben); Standard ist jetzt. */
+export async function nextDocumentNumber(tx: Tx, kind: DocumentKind, documentDate: Date = new Date()): Promise<string> {
   const { seq, prefix } = SEQUENCES[kind];
   // Sequenzname stammt aus der Konstante oben, nicht aus Benutzereingaben.
   const rows = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(`SELECT nextval('${seq}') AS n`);
   const n = rows[0]!.n;
-  return `${prefix}-${currentYear()}-${String(n).padStart(6, "0")}`;
+  return `${prefix}-${yearInAppTz(documentDate)}-${String(n).padStart(6, "0")}`;
 }
