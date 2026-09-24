@@ -1,0 +1,8 @@
+# Für interne Hostnamen stellt Caddy ein eigenes Zertifikat aus („tls internal“; das Root-Zertifikat
+# muss dann auf den Clients hinterlegt werden). Für öffentliche Domains die Zeile „tls internal“ entfernen –
+# Caddy holt dann automatisch ein Let's-Encrypt-Zertifikat.
+{$APP_DOMAIN} {
+	tls internal
+	encode zstd gzip
+	reverse_proxy app:3000
+}

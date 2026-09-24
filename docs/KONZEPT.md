@@ -641,3 +641,17 @@ arbeitskleidung/
 | Excel (P2) | exceljs | Lesen und Schreiben, aktiv gepflegt, über npm verfügbar |
 
 **Hinweis zur lokalen Umgebung:** Auf diesem Rechner sind Node 25 vorhanden, aber **weder Docker noch PostgreSQL**. Für Entwicklung und Integrationstests brauche ich eins von beiden. Empfehlung: Docker Desktop oder OrbStack, weil das auch dem Deployment-Ziel entspricht. Alternative: `brew install postgresql@17`. Für die Laufzeit empfehle ich die aktuelle Node-LTS statt Node 25 (im Docker-Image ohnehin).
+
+---
+
+## Umsetzungsnotizen (Abweichungen vom Entwurf)
+
+| Thema | Entwurf | Umsetzung | Grund |
+|---|---|---|---|
+| Ausgabe reservierter Ware | Bewegungen UNRESERVE + ISSUE | **eine** ISSUE-Bewegung mit `quantityDelta −n` und `reservedDelta −n` | Eine Bewegung je fachlichem Vorgang; beide Wirkungen stehen im Journal |
+| Sperre für Kontingente | QuotaYearLock | wie geplant (`src/server/tx.ts`) | – |
+| Storno einer Ausgabe mit Reservierung | offen | Reservierung wird storniert, Ware geht in den **freien** Bestand, Sonderfreigaben werden gegengebucht | eindeutiger Endzustand ohne „halb reservierte“ Ware |
+| Belegnummern | `A-<Jahr>-<Nr>` | Jahr = Belegdatum, laufende Nummer global (PostgreSQL-Sequenz) | kollisionsfrei ohne Jahres-Reset-Logik |
+| Abteilungswechsel | Datum frei | kein künftiges Datum | `Employee.departmentId` muss den heutigen Stand zeigen |
+| Rate Limit Login | 5/min | 10/min pro IP, konfigurierbar | Büros hinter gemeinsamer IP (NAT) |
+| Audit Log Mitarbeiter | Werte vorher/nachher | Namen und Notizen werden **nicht** protokolliert (nur „geändert“) | Pseudonymisierung (BDR-13) bleibt wirksam, Audit Log ist unveränderlich |
