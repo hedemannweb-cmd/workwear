@@ -71,3 +71,14 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "–";
   return deDateTime.format(typeof date === "string" ? new Date(date) : date);
 }
+
+const offsetFormatter = new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, timeZoneName: "longOffset" });
+
+/** Zeitpunkt 00:00 Uhr (fachliche Zeitzone) des angegebenen Kalendertags, z. B. für Monats-/Jahresgrenzen. */
+export function startOfDayInAppTz(isoDate: string): Date {
+  const utcMidnight = new Date(`${isoDate}T00:00:00Z`);
+  const tz = offsetFormatter.formatToParts(utcMidnight).find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+  const m = /GMT([+-])(\d{2}):(\d{2})/.exec(tz);
+  const offsetMinutes = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+  return new Date(utcMidnight.getTime() - offsetMinutes * 60_000);
+}

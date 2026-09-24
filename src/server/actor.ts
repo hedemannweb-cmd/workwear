@@ -81,3 +81,16 @@ export function assertEmployeeInScope(actor: Actor, employee: { departmentId: st
     throw new DomainError("NOT_FOUND", "Der Mitarbeiter wurde nicht gefunden.");
   }
 }
+
+/**
+ * Für Seiten: fehlende Berechtigung führt auf eine verständliche Hinweisseite statt zu einem Fehler.
+ * (Server Actions und Domänenfunktionen prüfen unabhängig davon selbst.)
+ */
+export async function requirePagePermission(permission: Permission): Promise<Actor> {
+  const actor = await requireActor();
+  if (!can(actor, permission)) {
+    const { redirect } = await import("next/navigation");
+    redirect("/kein-zugriff");
+  }
+  return actor;
+}

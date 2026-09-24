@@ -37,7 +37,8 @@ export const auth = betterAuth({
     window: 60,
     max: 100,
     customRules: {
-      "/sign-in/email": { window: 60, max: 5 },
+      // pro IP; Büros mit gemeinsamer IP (NAT) melden sich zu Schichtbeginn gleichzeitig an
+      "/sign-in/email": { window: 60, max: Number(process.env.AUTH_SIGNIN_RATE_LIMIT) || 10 },
     },
   },
   advanced: {
