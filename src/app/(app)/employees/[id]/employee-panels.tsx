@@ -33,6 +33,7 @@ import {
   returnClothingAction,
 } from "@/modules/issues/actions";
 import type { CatalogGroup } from "@/modules/issues/server/catalog";
+import { randomUUID } from "@/lib/uuid";
 import { IssueDialog } from "./issue-dialog";
 
 // ───────────────────────────── Kopfzeilen-Aktionen ─────────────────────────────
@@ -480,7 +481,7 @@ export function ReservationsList({
                       () =>
                         issueClothingAction({
                           employeeId,
-                          clientRequestId: crypto.randomUUID(),
+                          clientRequestId: randomUUID(),
                           items: [{ articleVariantId: r.articleVariantId, quantity: r.quantity, reservationId: r.id }],
                         }),
                       { success: (d) => `Ausgabe ${d.issueNumber} gebucht.` },
@@ -741,7 +742,7 @@ function ReturnDialog({
                       () =>
                         exchangeClothingAction({
                           employeeId,
-                          clientRequestId: crypto.randomUUID(),
+                          clientRequestId: randomUUID(),
                           issueItemId: target.item.id,
                           quantity,
                           newArticleVariantId: newVariantId,
@@ -753,7 +754,7 @@ function ReturnDialog({
                       () =>
                         returnClothingAction({
                           employeeId,
-                          clientRequestId: crypto.randomUUID(),
+                          clientRequestId: randomUUID(),
                           confirmUnworn: unworn,
                           items: [{ issueItemId: target.item.id, quantity, returnType: type, reason: reason || undefined }],
                         }),

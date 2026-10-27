@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cancelOrderAction, confirmOrderAction, markOrderedAction, receiveGoodsAction } from "@/modules/orders/actions";
 import type { OrderDetail } from "@/modules/orders/server/queries";
+import { randomUUID } from "@/lib/uuid";
 
 const todayIso = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 
@@ -202,7 +203,7 @@ function ReceiveDialog({ order, onClose }: { order: OrderDetail; onClose: () => 
                 () =>
                   receiveGoodsAction({
                     orderId: order.id,
-                    clientRequestId: crypto.randomUUID(),
+                    clientRequestId: randomUUID(),
                     deliveryNoteNumber: deliveryNote || undefined,
                     items: order.items.map((i) => ({ orderItemId: i.id, quantity: Math.max(0, Number(qty[i.id]) || 0) })),
                     directIssueReservationIds: direct.filter((id) => order.items.some((i) => allocation(i).served.some((s) => s.id === id))),

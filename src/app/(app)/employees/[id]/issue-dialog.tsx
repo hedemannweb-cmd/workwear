@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { issueClothingAction, reserveClothingAction } from "@/modules/issues/actions";
 import type { CatalogGroup, CatalogVariant } from "@/modules/issues/server/catalog";
+import { randomUUID } from "@/lib/uuid";
 
 type Line = {
   key: string;
@@ -114,7 +115,7 @@ export function IssueDialog({
   function addLine() {
     const l = currentLine();
     if (!l) return;
-    setLines((ls) => [...ls, { ...l, key: crypto.randomUUID() }]);
+    setLines((ls) => [...ls, { ...l, key: randomUUID() }]);
     setVariantId(null);
     setQuantity(1);
   }
@@ -128,7 +129,7 @@ export function IssueDialog({
         () =>
           issueClothingAction({
             employeeId,
-            clientRequestId: crypto.randomUUID(),
+            clientRequestId: randomUUID(),
             items: issueLines.map((l) => ({ articleVariantId: l.variantId, quantity: l.quantity })),
             override: needsOverride && override ? { reason: overrideReason.trim() } : undefined,
           }),
@@ -141,7 +142,7 @@ export function IssueDialog({
         () =>
           reserveClothingAction({
             employeeId,
-            clientRequestId: crypto.randomUUID(),
+            clientRequestId: randomUUID(),
             items: orderLines.map((l) => ({ articleVariantId: l.variantId, quantity: l.quantity })),
           }),
         { success: `${orderLines.length === 1 ? "Bestellung" : `${orderLines.length} Bestellungen`} angefordert – Kontingent ist reserviert.` },
