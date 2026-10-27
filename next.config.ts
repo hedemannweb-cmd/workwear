@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
   // Separates Build-Verzeichnis erlaubt einen parallelen Dev-Server für E2E-Tests
   distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
+  // Zugriff auf den Dev-Server von anderen Geräten im Netzwerk (z. B. "192.168.1.20,mac-mini.local")
+  allowedDevOrigins: process.env.ALLOWED_DEV_ORIGINS?.split(",").filter(Boolean),
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
