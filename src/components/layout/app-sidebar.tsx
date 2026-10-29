@@ -7,6 +7,7 @@ import {
   PackageCheck,
   Settings,
   Shirt,
+  ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   Truck,
@@ -45,6 +46,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   users: UserCog,
   settings: Settings,
   audit: History,
+  permissions: ShieldCheck,
 };
 
 export function AppSidebar({ main, admin }: { main: NavItem[]; admin: NavItem[] }) {

@@ -18,6 +18,7 @@ export default async function UsersPage() {
       <PageHeader title="Benutzer" description="Konten für Verantwortliche, Manager und Administratoren. Mitarbeiter selbst melden sich nicht an." />
       <UsersClient
         currentUserId={actor.userId}
+        isAdmin={actor.role === "ADMIN"}
         departments={departments}
         rows={users.map((u) => ({
           id: u.id,

@@ -21,11 +21,22 @@ type Row = { id: string; name: string; email: string; role: Role; active: boolea
 const ROLE_LABEL: Record<Role, string> = { ADMIN: "Administrator", MANAGER: "Manager", RESPONSIBLE: "Verantwortlicher" };
 const ROLE_HINT: Record<Role, string> = {
   ADMIN: "Vollzugriff inkl. Benutzer, Einstellungen und Kontingentregeln.",
-  MANAGER: "Operative Funktionen, Auswertungen, Sonderfreigaben, Lagerkorrekturen, Bestellungen.",
-  RESPONSIBLE: "Mitarbeiter und Kontingente ansehen, Kleidung ausgeben, Bedarf anfordern, Wareneingang buchen.",
+  MANAGER: "Operative Funktionen, Auswertungen, Sonderfreigaben, Lagerkorrekturen, Bestellungen. Genaue Rechte unter Administration › Rollenrechte.",
+  RESPONSIBLE: "Mitarbeiter und Kontingente ansehen, Kleidung ausgeben, Bedarf anfordern, Wareneingang buchen. Genaue Rechte unter Administration › Rollenrechte.",
 };
 
-export function UsersClient({ rows, departments, currentUserId }: { rows: Row[]; departments: Array<{ id: string; name: string }>; currentUserId: string }) {
+export function UsersClient({
+  rows,
+  departments,
+  currentUserId,
+  isAdmin,
+}: {
+  rows: Row[];
+  departments: Array<{ id: string; name: string }>;
+  currentUserId: string;
+  /** Nur Administratoren dürfen Administratoren anlegen oder bearbeiten (serverseitig geprüft). */
+  isAdmin: boolean;
+}) {
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const h = columnHelper<Row>();
   const columns = [
@@ -56,12 +67,24 @@ export function UsersClient({ rows, departments, currentUserId }: { rows: Row[];
           </Button>
         }
       />
-      {editing && <UserSheet key={editing === "new" ? "new" : editing.id} row={editing === "new" ? null : editing} departments={departments} isSelf={editing !== "new" && editing.id === currentUserId} onClose={() => setEditing(null)} />}
+      {editing && <UserSheet key={editing === "new" ? "new" : editing.id} row={editing === "new" ? null : editing} departments={departments} isSelf={editing !== "new" && editing.id === currentUserId} isAdmin={isAdmin} onClose={() => setEditing(null)} />}
     </>
   );
 }
 
-function UserSheet({ row, departments, isSelf, onClose }: { row: Row | null; departments: Array<{ id: string; name: string }>; isSelf: boolean; onClose: () => void }) {
+function UserSheet({
+  row,
+  departments,
+  isSelf,
+  isAdmin,
+  onClose,
+}: {
+  row: Row | null;
+  departments: Array<{ id: string; name: string }>;
+  isSelf: boolean;
+  isAdmin: boolean;
+  onClose: () => void;
+}) {
   const { run, pending, fieldErrors } = useAction();
   const [v, setV] = useState({
     name: row?.name ?? "",
@@ -107,12 +130,14 @@ function UserSheet({ row, departments, isSelf, onClose }: { row: Row | null; dep
       )}
       <div className="space-y-1">
         <Label>Rolle</Label>
-        <Select value={v.role} onValueChange={(role) => setV({ ...v, role: role as Role, restrictedToDepartments: role === "ADMIN" ? false : v.restrictedToDepartments })} disabled={isSelf}>
+        <Select value={v.role} onValueChange={(role) => setV({ ...v, role: role as Role, restrictedToDepartments: role === "ADMIN" ? false : v.restrictedToDepartments })} disabled={isSelf || (!isAdmin && v.role === "ADMIN")}>
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            {(Object.keys(ROLE_LABEL) as Role[])
+              .filter((r) => isAdmin || r !== "ADMIN" || v.role === "ADMIN")
+              .map((r) => (
               <SelectItem key={r} value={r}>
                 {ROLE_LABEL[r]}
               </SelectItem>

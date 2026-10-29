@@ -11,6 +11,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { dateOnly, currentYear } from "../src/lib/dates";
 import type { Actor } from "../src/server/actor";
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS, isConfigurableRole } from "../src/server/permissions";
 import { db } from "../src/server/db";
 import { runInTransaction } from "../src/server/tx";
 import { createUser } from "../src/modules/users/server/users";
@@ -51,7 +52,9 @@ export async function seed() {
 }
 
 function toActor(u: { id: string; name: string; email: string; role: Actor["role"] }, departmentIds: string[] | null = null): Actor {
-  return { userId: u.id, name: u.name, email: u.email, role: u.role, departmentIds };
+  // Frische Datenbank: es gelten die Standardrechte
+  const permissions = new Set(isConfigurableRole(u.role) ? DEFAULT_ROLE_PERMISSIONS[u.role] : PERMISSIONS);
+  return { userId: u.id, name: u.name, email: u.email, role: u.role, departmentIds, permissions };
 }
 
 async function createBaseData() {

@@ -40,7 +40,8 @@ export type AuditAction =
   | "GOODS_RECEIVED"
   | "INVENTORY_ADJUSTED"
   | "INVENTORY_LOCATION_UPDATED"
-  | "SETTING_CHANGED";
+  | "SETTING_CHANGED"
+  | "ROLE_PERMISSIONS_CHANGED";
 
 export type AuditEntry = {
   actorId: string | null;

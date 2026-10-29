@@ -36,7 +36,7 @@ Architektur und fachliche Entscheidungen stehen in [docs/KONZEPT.md](docs/KONZEP
 | **Wareneingang** | Teillieferungen, FIFO-Zuteilung an Mitarbeiter (mit Split), Direktausgabe oder reservierte Einlagerung |
 | **Lager** | Bestand je Variante × Lagerort (physisch/reserviert/frei), Mindestbestand mit Mail-Benachrichtigung (einmal je Unterschreitung), Zählung und Korrektur, Umlagerung, unveränderliches Bewegungsjournal |
 | **Dashboard** | Kennzahlen, Handlungsbedarf, Artikel unter Mindestbestand, Datenqualität |
-| **Administration** | Kontingentgruppen und -profile mit versionierten Jahresregeln, Lieferanten, Benutzer und Rollen (Abteilungsbeschränkung), Einstellungen, Audit Log |
+| **Administration** | Kontingentgruppen und -profile mit versionierten Jahresregeln, Lieferanten, Benutzer und Rollen (Abteilungsbeschränkung), Rollenrechte für Manager und Verantwortliche per Checkbox, Einstellungen, Audit Log |
 | **Suche** | ⌘K / Strg+K: fehlertolerante Suche (Name, Personalnummer, SKU, Bestellnummer) mit Kontingent-Schnellansicht |
 
 ## Technik und Architektur
@@ -284,7 +284,7 @@ Ohne Docker funktioniert dasselbe mit `pg_dump -Fc` und `pg_restore --clean --if
 
 ## Sicherheit und Datenschutz
 
-- **Autorisierung serverseitig:** Jede Server Action und jede Domänenfunktion prüft Rolle und Abteilungs-Scope (`src/server/permissions.ts`). Ausgeblendete Buttons sind nur Komfort.
+- **Autorisierung serverseitig:** Jede Server Action und jede Domänenfunktion prüft Rechte und Abteilungs-Scope (`src/server/permissions.ts`). Die Rechte von Manager und Verantwortlichem stellt ein Administrator unter Administration › Rollenrechte ein (gespeichert in `AppSetting`, Standard = Matrix in `permissions.ts`); Administratoren haben immer alle Rechte. Ausgeblendete Buttons sind nur Komfort.
 - **CSRF:** Server Actions prüfen den Origin, Better Auth schützt seine Endpunkte selbst. **XSS:** React escaped alle Ausgaben, es gibt kein `dangerouslySetInnerHTML`. **SQL-Injection:** nur Prisma bzw. parametrisierte `$queryRaw`-Templates.
 - **Validierung:** Zod-Schemas in jeder Domänenfunktion, zusätzlich DB-Constraints.
 - **Rate Limiting** für den Login, **sichere Cookies** in Produktion, Sicherheits-Header (`next.config.ts`).

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Role } from "@/generated/prisma/enums";
 import { dateOnly } from "@/lib/dates";
 import type { Actor } from "@/server/actor";
+import { getRolePermissions } from "@/server/role-permissions";
 import { db } from "@/server/db";
 
 /** Leert alle Anwendungstabellen (TRUNCATE umgeht die Unveränderlichkeits-Trigger bewusst). */
@@ -27,7 +28,7 @@ export async function makeActor(role: Role, departmentIds: string[] | null = nul
       departmentScopes: departmentIds ? { create: departmentIds.map((departmentId) => ({ departmentId })) } : undefined,
     },
   });
-  return { userId: user.id, name: user.name, email: user.email, role, departmentIds };
+  return { userId: user.id, name: user.name, email: user.email, role, departmentIds, permissions: await getRolePermissions(role) };
 }
 
 export const rid = () => randomUUID();

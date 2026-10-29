@@ -5,7 +5,7 @@ import { Role } from "@/generated/prisma/enums";
 import { type Actor, assertCan } from "@/server/actor";
 import { audit, diff } from "@/server/audit";
 import { db } from "@/server/db";
-import { DomainError, notFound } from "@/server/errors";
+import { DomainError, forbidden, notFound } from "@/server/errors";
 import { runInTransaction, type Tx } from "@/server/tx";
 
 const password = z
@@ -48,6 +48,7 @@ export async function createUser(actor: Actor | null, raw: z.input<typeof create
   if (actor) assertCan(actor, "user:manage");
   const input = createUserSchema.parse(raw);
   validateScope(input);
+  if (actor) assertMayTouchAdmin(actor, input.role);
   const hash = await hashPassword(input.password);
   const work = async (tx: Tx) => {
     const user = await tx.user.create({
@@ -78,12 +79,14 @@ export async function updateUser(actor: Actor, id: string, raw: z.input<typeof u
   assertCan(actor, "user:manage");
   const input = userSchema.parse(raw);
   validateScope(input);
-  if (id === actor.userId && (!input.active || input.role !== "ADMIN")) {
-    throw new DomainError("VALIDATION", "Sie können sich nicht selbst deaktivieren oder die Administratorrolle entziehen.");
+  if (id === actor.userId && (!input.active || input.role !== actor.role)) {
+    throw new DomainError("VALIDATION", "Sie können sich nicht selbst deaktivieren oder Ihre eigene Rolle ändern.");
   }
+  assertMayTouchAdmin(actor, input.role);
   await runInTransaction(async (tx) => {
     const before = await tx.user.findUnique({ where: { id }, include: { departmentScopes: true } });
     if (!before) throw notFound("Der Benutzer");
+    assertMayTouchAdmin(actor, before.role);
     await tx.user.update({
       where: { id },
       data: { name: input.name, email: input.email, role: input.role, active: input.active, restrictedToDepartments: input.restrictedToDepartments },
@@ -107,12 +110,23 @@ export async function resetPassword(actor: Actor, id: string, newPassword: strin
   const pw = password.parse(newPassword);
   const hash = await hashPassword(pw);
   await runInTransaction(async (tx) => {
+    const target = await tx.user.findUnique({ where: { id }, select: { role: true } });
+    if (!target) throw notFound("Der Benutzer");
+    assertMayTouchAdmin(actor, target.role);
     const account = await tx.account.findFirst({ where: { userId: id, providerId: "credential" } });
     if (account) await tx.account.update({ where: { id: account.id }, data: { password: hash } });
     else await tx.account.create({ data: { userId: id, accountId: id, providerId: "credential", password: hash } });
     await tx.session.deleteMany({ where: { userId: id } });
     await audit(tx, { actorId: actor.userId, action: "USER_PASSWORD_RESET", entityType: "User", entityId: id });
   });
+}
+
+/**
+ * user:manage kann auch an Manager/Verantwortliche vergeben werden. Administratoren anlegen,
+ * bearbeiten oder deren Passwort setzen bleibt trotzdem Administratoren vorbehalten.
+ */
+function assertMayTouchAdmin(actor: Actor, role: Role) {
+  if (role === "ADMIN" && actor.role !== "ADMIN") throw forbidden("Nur Administratoren dürfen Administratoren anlegen oder bearbeiten.");
 }
 
 function validateScope(input: { restrictedToDepartments: boolean; departmentIds: string[]; role: string }) {

@@ -12,9 +12,11 @@ export type NavIcon =
   | "suppliers"
   | "users"
   | "settings"
-  | "audit";
+  | "audit"
+  | "permissions";
 
-export type NavItem = { href: string; label: string; icon: NavIcon; permission: Permission };
+/** "ADMIN_ONLY": nur für die Rolle Administrator, nicht über Rollenrechte delegierbar. */
+export type NavItem = { href: string; label: string; icon: NavIcon; permission: Permission | "ADMIN_ONLY" };
 
 /** Hauptnavigation (Vorgabe 24). Sichtbarkeit nach Berechtigung – nur Komfort, keine Sicherheitsmaßnahme. */
 export const MAIN_NAV: NavItem[] = [
@@ -31,6 +33,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/quotas", label: "Kontingente", icon: "quotas", permission: "quota:adjust" },
   { href: "/admin/suppliers", label: "Lieferanten", icon: "suppliers", permission: "supplier:manage" },
   { href: "/admin/users", label: "Benutzer", icon: "users", permission: "user:manage" },
+  { href: "/admin/permissions", label: "Rollenrechte", icon: "permissions", permission: "ADMIN_ONLY" },
   { href: "/admin/settings", label: "Einstellungen", icon: "settings", permission: "settings:manage" },
   { href: "/admin/audit-log", label: "Audit Log", icon: "audit", permission: "audit:view" },
 ];

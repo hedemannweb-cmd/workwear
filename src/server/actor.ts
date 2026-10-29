@@ -6,7 +6,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { auth } from "./auth";
 import { db } from "./db";
 import { DomainError, forbidden } from "./errors";
-import { roleHas, type Permission } from "./permissions";
+import type { Permission } from "./permissions";
+import { getRolePermissions } from "./role-permissions";
 
 /** Der angemeldete Benutzer, wie ihn die Domänenfunktionen sehen. */
 export type Actor = {
@@ -16,6 +17,8 @@ export type Actor = {
   role: Role;
   /** null = keine Einschränkung; sonst die erlaubten Abteilungen */
   departmentIds: string[] | null;
+  /** Wirksame Rechte der Rolle (ADMIN: alle; sonst Konfiguration aus /admin/permissions). */
+  permissions: ReadonlySet<Permission>;
 };
 
 /** Lädt den Actor frisch aus der Datenbank (Rolle/Aktivstatus nie aus dem Cookie übernehmen). */
@@ -33,12 +36,14 @@ export async function loadActor(userId: string): Promise<Actor | null> {
     },
   });
   if (!user || !user.active) return null;
+  const permissions = await getRolePermissions(user.role);
   return {
     userId: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
     departmentIds: user.restrictedToDepartments ? user.departmentScopes.map((s) => s.departmentId) : null,
+    permissions,
   };
 }
 
@@ -56,7 +61,7 @@ export async function requireActor(): Promise<Actor> {
 }
 
 export function can(actor: Actor, permission: Permission): boolean {
-  return roleHas(actor.role, permission);
+  return actor.role === "ADMIN" || actor.permissions.has(permission);
 }
 
 export function assertCan(actor: Actor, permission: Permission): void {
@@ -89,6 +94,16 @@ export function assertEmployeeInScope(actor: Actor, employee: { departmentId: st
 export async function requirePagePermission(permission: Permission): Promise<Actor> {
   const actor = await requireActor();
   if (!can(actor, permission)) {
+    const { redirect } = await import("next/navigation");
+    redirect("/kein-zugriff");
+  }
+  return actor;
+}
+
+/** Für Seiten, die bewusst nur der Rolle Administrator offenstehen (nicht über Rollenrechte delegierbar). */
+export async function requireAdminPage(): Promise<Actor> {
+  const actor = await requireActor();
+  if (actor.role !== "ADMIN") {
     const { redirect } = await import("next/navigation");
     redirect("/kein-zugriff");
   }
