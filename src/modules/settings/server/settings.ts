@@ -39,7 +39,7 @@ export async function getAllSettings() {
   });
 }
 
-export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, value: unknown, reason: string) {
+export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, value: unknown, reason?: string) {
   assertCan(actor, "settings:manage");
   const parsed = SETTINGS[key].schema.parse(value);
   await runInTransaction(async (tx) => {
@@ -49,6 +49,6 @@ export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, 
       create: { key, value: parsed as never, updatedById: actor.userId },
       update: { value: parsed as never, updatedById: actor.userId },
     });
-    await audit(tx, { actorId: actor.userId, action: "SETTING_CHANGED", entityType: "AppSetting", entityId: key, oldValue: before, newValue: parsed, reason });
+    await audit(tx, { actorId: actor.userId, action: "SETTING_CHANGED", entityType: "AppSetting", entityId: key, oldValue: before, newValue: parsed, reason: reason?.trim() || null });
   });
 }

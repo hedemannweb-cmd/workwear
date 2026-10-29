@@ -169,7 +169,7 @@ describe("Admin-Sonderfreigabe (BDR-6)", () => {
 });
 
 describe("Individuelle Anpassung", () => {
-  it("erhöht das Kontingent, verlangt Begründung und protokolliert vorher/nachher", async () => {
+  it("erhöht das Kontingent und protokolliert vorher/nachher; Begründung ist optional", async () => {
     const emp = await makeEmployee(world.departments.prod.id);
     await adjustQuota(world.admin, { employeeId: emp.id, quotaGroupId: world.groups.pants.id, year: YEAR, quantityDelta: 2, reason: "Schweißarbeiten" });
     expect(await quotaLine(emp.id, world.groups.pants.id)).toMatchObject({ base: 2, adjustments: 2, available: 4 });
@@ -179,9 +179,8 @@ describe("Individuelle Anpassung", () => {
     expect(log.oldValue).toMatchObject({ available: 2 });
     expect(log.newValue).toMatchObject({ available: 4, quantityDelta: 2 });
 
-    await expect(
-      adjustQuota(world.admin, { employeeId: emp.id, quotaGroupId: world.groups.pants.id, year: YEAR, quantityDelta: 1, reason: "" }),
-    ).rejects.toThrow();
+    const { adjustmentId } = await adjustQuota(world.admin, { employeeId: emp.id, quotaGroupId: world.groups.pants.id, year: YEAR, quantityDelta: 1 });
+    expect(await db.employeeQuotaAdjustment.findUniqueOrThrow({ where: { id: adjustmentId } })).toMatchObject({ reason: "Manuelle Anpassung" });
   });
 
   it("Kürzung unter bereits gebundene Menge ist nicht möglich", async () => {
@@ -351,10 +350,10 @@ describe("Kontingentregeln pflegen", () => {
   it("vergangene Jahre sind unveränderlich, neue Version begrenzt die Vorgängerregel", async () => {
     const { setQuotaRule } = await import("@/modules/quotas/server/admin");
     await expect(
-      setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR - 1, quantityPerYear: 9, reason: "Rückwirkend ändern" }),
+      setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR - 1, quantityPerYear: 9 }),
     ).rejects.toThrow(/vergangener Jahre/);
 
-    await setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8, reason: "Neue Regel ab nächstem Jahr" });
+    await setQuotaRule(world.admin, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8 });
     const rules = await db.quotaRule.findMany({ where: { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id }, orderBy: { validFromYear: "asc" } });
     expect(rules.map((r) => [r.validFromYear, r.validToYear, r.quantityPerYear])).toEqual([
       [2020, YEAR, 5],
@@ -370,7 +369,7 @@ describe("Kontingentregeln pflegen", () => {
     const { setQuotaRule } = await import("@/modules/quotas/server/admin");
     const manager = await makeActor("MANAGER");
     await expectDomainError(
-      setQuotaRule(manager, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8, reason: "nicht erlaubt" }),
+      setQuotaRule(manager, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8 }),
       "FORBIDDEN",
     );
   });

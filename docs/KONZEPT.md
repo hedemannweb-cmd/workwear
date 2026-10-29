@@ -45,7 +45,7 @@ Alle vier müssen **in derselben DB-Transaktion** fortgeschrieben werden, sobald
 | E7 | Austritt mitten im Jahr, offene Reservierungen | Austritt storniert offene Reservierungen nicht automatisch, zeigt sie aber als Handlungsbedarf. Nach `exitDate` sind keine Ausgaben mehr möglich |
 | E8 | Umtausch über den Jahreswechsel | Neue Ausgabe erbt `quotaYear` der Originalposition |
 | E9 | Artikel wird deaktiviert, obwohl Reservierungen offen sind | Deaktivierung verhindert neue Vorgänge; offene werden weiter abgewickelt |
-| E10 | Kontingentregel für ein laufendes Jahr wird geändert | Regeln sind versioniert (`validFromYear`). Änderungen im laufenden Jahr nur durch ADMIN mit Begründung und Audit |
+| E10 | Kontingentregel für ein laufendes Jahr wird geändert | Regeln sind versioniert (`validFromYear`). Änderungen im laufenden Jahr nur durch ADMIN, mit Audit (alt/neu; ohne Begründungsfeld, Entscheidung 29.10.2026) |
 | E11 | Admin will über Kontingent hinaus ausgeben | → **BDR-6** |
 | E12 | Inventurdifferenz erzeugt einen negativen Bestand | Nicht möglich. Die Inventur setzt den Zählwert, die Differenz wird als `INVENTORY_COUNT`-Bewegung gebucht. Liegt `reserved` dann über `physical`, entsteht ein Handlungsbedarf |
 | E13 | Mitarbeiter hat für eine Kategorie keine Größe hinterlegt | Ausgabe bleibt möglich (Variante wird explizit gewählt); erscheint im Datenqualitäts-Dashboard |
@@ -218,7 +218,7 @@ Ein Preis je Variante ist bewusst optional (`ArticleVariantPrice` in Phase 2), w
 |---|---|---|
 | **QuotaProfile** | id, code (z. B. `PRODUKTION_STANDARD`), name, entryRule? `enum(FULL, PRORATED, MANUAL)` (überschreibt die globale Einstellung), active | UNIQUE(code) |
 | **QuotaRule** | id, quotaProfileId, quotaGroupId, **validFromYear**, validToYear?, quantityPerYear, **minIntervalMonths?**, createdById, createdAt | UNIQUE(quotaProfileId, quotaGroupId, validFromYear); CHECK(quantityPerYear ≥ 0); CHECK(validToYear ≥ validFromYear); CHECK(minIntervalMonths > 0) |
-| **EmployeeQuotaAdjustment** | id, employeeId, quotaGroupId, year, quantityDelta, **reason (NOT NULL, min. 5 Zeichen)**, source `enum(MANUAL, OVERRIDE, IMPORT)`, relatedIssueId?, createdById, createdAt | IDX(employeeId, year); CHECK(quantityDelta ≠ 0) |
+| **EmployeeQuotaAdjustment** | id, employeeId, quotaGroupId, year, quantityDelta, **reason (NOT NULL, min. 5 Zeichen; seit 29.10.2026 ohne Eingabefeld, der Service setzt „Manuelle Anpassung“ bzw. „Sonderfreigabe“)**, source `enum(MANUAL, OVERRIDE, IMPORT)`, relatedIssueId?, createdById, createdAt | IDX(employeeId, year); CHECK(quantityDelta ≠ 0) |
 | **QuotaYearLock** | employeeId, year | PK(employeeId, year). Reine Sperrzeile, siehe E.4 |
 
 **Versionierung:** Eine Regel gilt ab `validFromYear`. Für 2027 wird eine neue Regelzeile angelegt; 2025 und 2026 bleiben unberührt. Die für Jahr Y gültige Regel ist die mit dem größten `validFromYear ≤ Y` (und `validToYear` NULL oder ≥ Y).

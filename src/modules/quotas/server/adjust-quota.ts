@@ -5,6 +5,7 @@ import { audit } from "@/server/audit";
 import { DomainError, notFound } from "@/server/errors";
 import { lockQuotaYears, runInTransaction } from "@/server/tx";
 import { getEmployeeQuota } from "./quota-service";
+import { optionalReason } from "@/server/reason";
 
 export const adjustQuotaSchema = z.object({
   employeeId: z.string().min(1),
@@ -16,7 +17,7 @@ export const adjustQuotaSchema = z.object({
     .min(-50)
     .max(50)
     .refine((v) => v !== 0, "Die Anpassung darf nicht 0 sein."),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
+  reason: optionalReason("Manuelle Anpassung"),
 });
 
 /**

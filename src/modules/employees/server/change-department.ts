@@ -5,12 +5,13 @@ import { type Actor, assertCan, assertEmployeeInScope } from "@/server/actor";
 import { audit } from "@/server/audit";
 import { DomainError, notFound } from "@/server/errors";
 import { runInTransaction } from "@/server/tx";
+import { optionalReason } from "@/server/reason";
 
 export const changeDepartmentSchema = z.object({
   employeeId: z.string().min(1),
   departmentId: z.string().min(1),
   validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datum"),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
+  reason: optionalReason("Abteilungswechsel"),
 });
 
 /**

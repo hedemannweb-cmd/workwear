@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { issueClothingAction, reserveClothingAction } from "@/modules/issues/actions";
@@ -58,7 +57,6 @@ export function IssueDialog({
   const [quantity, setQuantity] = useState(1);
   const [lines, setLines] = useState<Line[]>([]);
   const [override, setOverride] = useState(false);
-  const [overrideReason, setOverrideReason] = useState("");
 
   const group = catalog.find((g) => g.id === groupId) ?? null;
   const article = group?.articles.find((a) => a.id === articleId) ?? (group?.articles.length === 1 ? group.articles[0] : null) ?? null;
@@ -77,7 +75,6 @@ export function IssueDialog({
     setQuantity(1);
     setLines([]);
     setOverride(false);
-    setOverrideReason("");
   }
 
   function selectGroup(id: string) {
@@ -114,7 +111,7 @@ export function IssueDialog({
 
   const orderExceeds = exceeded.some(([gid]) => allLines.some((l) => l.groupId === gid && l.mode === "order"));
   const needsOverride = exceeded.length > 0;
-  const blocked = allLines.length === 0 || (needsOverride && (!canOverride || !override || overrideReason.trim().length < 5 || orderExceeds));
+  const blocked = allLines.length === 0 || (needsOverride && (!canOverride || !override || orderExceeds));
 
   function addLine() {
     const l = currentLine();
@@ -135,7 +132,7 @@ export function IssueDialog({
             employeeId,
             clientRequestId: randomUUID(),
             items: issueLines.map((l) => ({ articleVariantId: l.variantId, quantity: l.quantity })),
-            override: needsOverride && override ? { reason: overrideReason.trim() } : undefined,
+            override: needsOverride && override ? {} : undefined,
           }),
         { success: (d) => `Ausgabe ${d.issueNumber} gebucht.` },
       );
@@ -338,9 +335,6 @@ export function IssueDialog({
                   <Checkbox checked={override} onCheckedChange={(v) => setOverride(v === true)} />
                   Sonderfreigabe erteilen (wird als Kontingentanpassung protokolliert)
                 </label>
-                {override && (
-                  <Textarea placeholder="Begründung (Pflicht)" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2} maxLength={500} />
-                )}
               </div>
             ) : (
               <p>Eine Sonderfreigabe kann nur ein Manager oder Administrator erteilen.</p>

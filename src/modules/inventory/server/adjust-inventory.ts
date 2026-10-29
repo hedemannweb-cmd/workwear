@@ -6,8 +6,9 @@ import { audit } from "@/server/audit";
 import { DomainError, notFound } from "@/server/errors";
 import { runInTransaction } from "@/server/tx";
 import { applyStockChange, applyStockChanges } from "./stock";
+import { optionalReason } from "@/server/reason";
 
-const reason = z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500);
+const reason = optionalReason("Bestandskorrektur");
 
 export const adjustInventorySchema = z.discriminatedUnion("mode", [
   /** Korrektur um eine Differenz (z. B. Bruch, Fund) */

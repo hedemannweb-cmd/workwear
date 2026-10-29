@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   ]);
   return (
     <>
-      <PageHeader title="Einstellungen" description="Systemweite Regeln. Jede Änderung wird mit Begründung im Audit Log protokolliert." />
+      <PageHeader title="Einstellungen" description="Systemweite Regeln. Jede Änderung wird im Audit Log protokolliert." />
       <SettingsClient settings={settings.map((s) => ({ key: s.key, label: s.label, value: s.value as never }))} />
       {!mailConfigured() && (
         <p className="text-sm text-muted-foreground">

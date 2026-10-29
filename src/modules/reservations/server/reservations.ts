@@ -9,6 +9,7 @@ import { audit } from "@/server/audit";
 import { db } from "@/server/db";
 import { DomainError, invalidState, notFound } from "@/server/errors";
 import { lockQuotaYears, runInTransaction } from "@/server/tx";
+import { optionalReason } from "@/server/reason";
 
 export const reserveClothingSchema = z.object({
   employeeId: z.string().min(1),
@@ -113,7 +114,7 @@ export async function reserveClothing(actor: Actor, rawInput: ReserveClothingInp
 
 export const cancelReservationSchema = z.object({
   reservationId: z.string().min(1),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
+  reason: optionalReason("Reservierung storniert"),
 });
 
 /**

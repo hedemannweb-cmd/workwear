@@ -11,6 +11,7 @@ import { DomainError, forbidden, invalidState, notFound } from "@/server/errors"
 import { nextDocumentNumber } from "@/server/numbering";
 import { lockQuotaYears, runInTransaction, type Tx } from "@/server/tx";
 import { preferredUnitCosts } from "@/modules/articles/server/pricing";
+import { optionalReason } from "@/server/reason";
 
 export const issueClothingSchema = z.object({
   employeeId: z.string().min(1),
@@ -28,7 +29,7 @@ export const issueClothingSchema = z.object({
     .min(1, "Mindestens eine Position angeben.")
     .max(30),
   /** Sonderfreigabe über das Kontingent hinaus (BDR-6), nur MANAGER/ADMIN */
-  override: z.object({ reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.") }).optional(),
+  override: z.object({ reason: optionalReason("Sonderfreigabe") }).optional(),
   notes: z.string().trim().max(500).optional(),
 });
 
@@ -305,7 +306,7 @@ export function assertEmployeeActive(employee: { status: string; exitDate: Date 
 
 export const cancelIssueSchema = z.object({
   issueId: z.string().min(1),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
+  reason: optionalReason("Ausgabe storniert"),
 });
 
 /**

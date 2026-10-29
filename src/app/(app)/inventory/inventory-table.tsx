@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { adjustInventoryAction, transferInventoryAction } from "@/modules/inventory/actions";
 
 type Row = {
@@ -149,7 +148,6 @@ function AdjustDialog({
   const [mode, setMode] = useState(target.mode);
   const [value, setValue] = useState(mode === "count" ? String(target.row.physical) : "");
   const [toLocation, setToLocation] = useState("");
-  const [reason, setReason] = useState("");
   const r = target.row;
   const label = [r.articleName, r.color, r.size].filter(Boolean).join(" · ");
   return (
@@ -196,24 +194,20 @@ function AdjustDialog({
               <p className="text-sm text-muted-foreground">Differenz: {Number(value) - r.physical > 0 ? "+" : ""}{Number(value) - r.physical}</p>
             )}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="adj-reason">Begründung (Pflicht)</Label>
-            <Textarea id="adj-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Abbrechen
           </Button>
           <Button
-            disabled={pending || value === "" || reason.trim().length < 5 || (mode === "transfer" && !toLocation)}
+            disabled={pending || value === "" || (mode === "transfer" && !toLocation)}
             onClick={async () => {
               const res =
                 mode === "transfer"
-                  ? await run(() => transferInventoryAction({ articleVariantId: r.variantId, fromLocationId: r.locationId, toLocationId: toLocation, quantity: Number(value), reason }), { success: "Umgelagert." })
+                  ? await run(() => transferInventoryAction({ articleVariantId: r.variantId, fromLocationId: r.locationId, toLocationId: toLocation, quantity: Number(value) }), { success: "Umgelagert." })
                   : mode === "count"
-                    ? await run(() => adjustInventoryAction({ mode: "count", articleVariantId: r.variantId, inventoryLocationId: r.locationId, countedQuantity: Number(value), reason }), { success: "Zählung gebucht." })
-                    : await run(() => adjustInventoryAction({ mode: "delta", articleVariantId: r.variantId, inventoryLocationId: r.locationId, quantityDelta: Number(value), reason }), { success: "Korrektur gebucht." });
+                    ? await run(() => adjustInventoryAction({ mode: "count", articleVariantId: r.variantId, inventoryLocationId: r.locationId, countedQuantity: Number(value) }), { success: "Zählung gebucht." })
+                    : await run(() => adjustInventoryAction({ mode: "delta", articleVariantId: r.variantId, inventoryLocationId: r.locationId, quantityDelta: Number(value) }), { success: "Korrektur gebucht." });
               if (res.ok) onClose();
             }}
           >

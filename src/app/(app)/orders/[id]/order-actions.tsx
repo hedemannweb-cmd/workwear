@@ -2,7 +2,7 @@
 
 import { CheckCheck, Loader2, PackageCheck, Send } from "lucide-react";
 import { useState } from "react";
-import { ReasonDialog } from "@/components/shared/reason-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useAction } from "@/components/shared/use-action";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,14 +41,14 @@ export function OrderActions({ order, perms }: { order: OrderDetail; perms: { ma
         </Button>
       )}
       {perms.cancel && ["DRAFT", "ORDERED", "CONFIRMED"].includes(order.status) && nothingReceived && (
-        <ReasonDialog
+        <ConfirmDialog
           trigger={<Button variant="outline">Stornieren</Button>}
           title={`Bestellung ${order.orderNumber} stornieren`}
           description="Enthaltene Mitarbeiteranforderungen gehen zurück in den offenen Bedarf."
           confirmLabel="Bestellung stornieren"
           destructive
           pending={pending}
-          onConfirm={(reason) => run(() => cancelOrderAction({ orderId: order.id, reason }), { success: "Bestellung storniert." })}
+          onConfirm={() => run(() => cancelOrderAction({ orderId: order.id }), { success: "Bestellung storniert." })}
         />
       )}
       {orderedOpen && <MarkOrderedDialog orderId={order.id} onClose={() => setOrderedOpen(false)} />}

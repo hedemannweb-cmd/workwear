@@ -5,7 +5,6 @@ import { useAction } from "@/components/shared/use-action";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,7 +42,6 @@ export function SettingsClient({ settings }: { settings: Setting[] }) {
 function SettingCard({ setting }: { setting: Setting }) {
   const { run, pending } = useAction();
   const [value, setValue] = useState(setting.value);
-  const [reason, setReason] = useState("");
   const changed = Array.isArray(value) ? JSON.stringify(value) !== JSON.stringify(setting.value) : value !== setting.value;
   const [emailText, setEmailText] = useState(Array.isArray(setting.value) ? setting.value.join("\n") : "");
   return (
@@ -82,13 +80,9 @@ function SettingCard({ setting }: { setting: Setting }) {
           <Input type="number" min={1} max={30} value={String(value)} onChange={(e) => setValue(Number(e.target.value))} className="w-24" />
         )}
         {changed && (
-          <div className="space-y-2">
-            <Label htmlFor={`r-${setting.key}`}>Begründung</Label>
-            <Input id={`r-${setting.key}`} value={reason} onChange={(e) => setReason(e.target.value)} />
-            <Button size="sm" disabled={pending || reason.trim().length < 5} onClick={() => run(() => updateSettingAction(setting.key, value, reason), { success: "Einstellung gespeichert." })}>
-              Speichern
-            </Button>
-          </div>
+          <Button size="sm" disabled={pending} onClick={() => run(() => updateSettingAction(setting.key, value), { success: "Einstellung gespeichert." })}>
+            Speichern
+          </Button>
         )}
       </CardContent>
     </Card>

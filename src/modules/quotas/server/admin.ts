@@ -30,7 +30,6 @@ export const quotaRuleSchema = z.object({
   quantityPerYear: z.number().int().min(0).max(100),
   /** rollierender Mindestabstand zwischen zwei Ausgaben; null = keiner */
   minIntervalMonths: z.number().int().min(1, "Mindestens 1 Monat.").max(120, "Höchstens 120 Monate.").nullable().default(null),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
 });
 
 export async function getQuotaAdminData() {
@@ -150,7 +149,6 @@ export async function setQuotaRule(actor: Actor, raw: z.input<typeof quotaRuleSc
         minIntervalMonths: (existing ?? previous)?.minIntervalMonths ?? null,
       },
       newValue: { group: group.name, fromYear: input.validFromYear, quantityPerYear: input.quantityPerYear, minIntervalMonths: input.minIntervalMonths },
-      reason: input.reason,
     });
   });
 }

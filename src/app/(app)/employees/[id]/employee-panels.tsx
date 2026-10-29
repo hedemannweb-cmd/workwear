@@ -4,7 +4,7 @@ import { ArrowLeftRight, Building2, EllipsisVertical, Loader2, Pencil, Ruler, Sh
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ReasonDialog } from "@/components/shared/reason-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ISSUE_STATUS, RESERVATION_STATUS, StatusOf } from "@/components/shared/status-badge";
 import { useAction } from "@/components/shared/use-action";
 import { Button } from "@/components/ui/button";
@@ -153,13 +153,12 @@ function AdjustQuotaDialog({
   const { run, pending, fieldErrors } = useAction();
   const [groupId, setGroupId] = useState("");
   const [delta, setDelta] = useState("1");
-  const [reason, setReason] = useState("");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Kontingent anpassen ({year})</DialogTitle>
-          <DialogDescription>Individuelle Anpassung für dieses Jahr. Wird mit Begründung im Audit Log protokolliert.</DialogDescription>
+          <DialogDescription>Individuelle Anpassung für dieses Jahr. Wird im Audit Log protokolliert.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="space-y-1">
@@ -182,26 +181,20 @@ function AdjustQuotaDialog({
             <Input id="delta" type="number" value={delta} onChange={(e) => setDelta(e.target.value)} min={-50} max={50} />
             {fieldErrors.quantityDelta && <p className="text-sm text-destructive">{fieldErrors.quantityDelta[0]}</p>}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="adj-reason">Begründung (Pflicht)</Label>
-            <Textarea id="adj-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} />
-            {fieldErrors.reason && <p className="text-sm text-destructive">{fieldErrors.reason[0]}</p>}
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Abbrechen
           </Button>
           <Button
-            disabled={pending || !groupId || reason.trim().length < 5 || !Number(delta)}
+            disabled={pending || !groupId || !Number(delta)}
             onClick={async () => {
               const res = await run(
-                () => adjustQuotaAction({ employeeId, quotaGroupId: groupId, year, quantityDelta: Number(delta), reason }),
+                () => adjustQuotaAction({ employeeId, quotaGroupId: groupId, year, quantityDelta: Number(delta) }),
                 { success: "Kontingent angepasst." },
               );
               if (res.ok) {
                 onOpenChange(false);
-                setReason("");
                 setDelta("1");
               }
             }}
@@ -228,7 +221,6 @@ function ChangeDepartmentDialog({
   const { run, pending } = useAction();
   const [departmentId, setDepartmentId] = useState("");
   const [validFrom, setValidFrom] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }));
-  const [reason, setReason] = useState("");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -259,19 +251,15 @@ function ChangeDepartmentDialog({
             <Label htmlFor="validFrom">Gültig ab</Label>
             <Input id="validFrom" type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="dept-reason">Begründung (Pflicht)</Label>
-            <Textarea id="dept-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Abbrechen
           </Button>
           <Button
-            disabled={pending || !departmentId || reason.trim().length < 5}
+            disabled={pending || !departmentId}
             onClick={async () => {
-              const res = await run(() => changeDepartmentAction({ employeeId, departmentId, validFrom, reason }), {
+              const res = await run(() => changeDepartmentAction({ employeeId, departmentId, validFrom }), {
                 success: "Abteilung gewechselt.",
               });
               if (res.ok) onOpenChange(false);
@@ -495,7 +483,7 @@ export function ReservationsList({
                 </Button>
               )}
               {canCancel && (
-                <ReasonDialog
+                <ConfirmDialog
                   trigger={
                     <Button size="sm" variant="ghost">
                       Stornieren
@@ -510,7 +498,7 @@ export function ReservationsList({
                   confirmLabel="Stornieren"
                   destructive
                   pending={pending}
-                  onConfirm={(reason) => run(() => cancelReservationAction(employeeId, { reservationId: r.id, reason }), { success: "Reservierung storniert." })}
+                  onConfirm={() => run(() => cancelReservationAction(employeeId, { reservationId: r.id }), { success: "Reservierung storniert." })}
                 />
               )}
             </div>
@@ -623,7 +611,7 @@ export function IssueHistory({
                             </DropdownMenuItem>
                           )}
                           {idx === 0 && issue.cancellable && issue.items.every((i) => i.returned === 0) && (
-                            <ReasonDialog
+                            <ConfirmDialog
                               trigger={
                                 <DropdownMenuItem variant="destructive" onSelect={(e) => e.preventDefault()}>
                                   Ausgabe stornieren
@@ -634,7 +622,7 @@ export function IssueHistory({
                               confirmLabel="Stornieren"
                               destructive
                               pending={pending}
-                              onConfirm={(reason) => run(() => cancelIssueAction(employeeId, { issueId: issue.id, reason }), { success: "Ausgabe storniert." })}
+                              onConfirm={() => run(() => cancelIssueAction(employeeId, { issueId: issue.id }), { success: "Ausgabe storniert." })}
                             />
                           )}
                         </DropdownMenuContent>

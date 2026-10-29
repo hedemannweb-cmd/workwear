@@ -7,6 +7,7 @@ import { audit } from "@/server/audit";
 import { DomainError, invalidState, notFound } from "@/server/errors";
 import { nextDocumentNumber } from "@/server/numbering";
 import { lockOrder, runInTransaction } from "@/server/tx";
+import { optionalReason } from "@/server/reason";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datum");
 
@@ -158,7 +159,7 @@ export async function confirmOrder(actor: Actor, rawInput: { orderId: string; ex
 
 export const cancelOrderSchema = z.object({
   orderId: z.string().min(1),
-  reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
+  reason: optionalReason("Bestellung storniert"),
 });
 
 /**
