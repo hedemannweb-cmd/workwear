@@ -54,3 +54,6 @@ next-env.d.ts
 # Sicherungen
 /backups/*
 !/backups/.gitkeep
+
+# Editor-Swapdateien
+*.swp
