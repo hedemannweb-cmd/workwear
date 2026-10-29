@@ -17,7 +17,7 @@ export default async function ArticlePage(props: PageProps<"/articles/[id]">) {
     if (isDomainError(e)) notFound();
     throw e;
   });
-  const options = await articleFormOptions();
+  const options = await articleFormOptions(article.categoryId);
   const canManage = can(actor, "article:manage");
 
   return (

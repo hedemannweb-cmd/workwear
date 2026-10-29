@@ -10,6 +10,7 @@ export type NavIcon =
   | "receipts"
   | "quotas"
   | "suppliers"
+  | "categories"
   | "users"
   | "settings"
   | "audit"
@@ -31,6 +32,7 @@ export const MAIN_NAV: NavItem[] = [
 
 export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/quotas", label: "Kontingente", icon: "quotas", permission: "quota:adjust" },
+  { href: "/admin/categories", label: "Kategorien", icon: "categories", permission: "category:manage" },
   { href: "/admin/suppliers", label: "Lieferanten", icon: "suppliers", permission: "supplier:manage" },
   { href: "/admin/users", label: "Benutzer", icon: "users", permission: "user:manage" },
   { href: "/admin/permissions", label: "Rollenrechte", icon: "permissions", permission: "ADMIN_ONLY" },

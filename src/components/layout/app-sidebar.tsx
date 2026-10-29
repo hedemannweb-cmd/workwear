@@ -15,6 +15,7 @@ import {
   Users,
   Warehouse,
   Building2,
+  Tags,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -43,6 +44,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   receipts: PackageCheck,
   quotas: SlidersHorizontal,
   suppliers: Truck,
+  categories: Tags,
   users: UserCog,
   settings: Settings,
   audit: History,

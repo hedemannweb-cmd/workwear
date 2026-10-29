@@ -80,9 +80,10 @@ export async function getArticle(id: string) {
   return article;
 }
 
-export async function articleFormOptions() {
+/** currentCategoryId: beim Bearbeiten die bisherige Kategorie mitliefern, auch wenn sie inzwischen inaktiv ist. */
+export async function articleFormOptions(currentCategoryId?: string) {
   const [categories, groups, suppliers] = await Promise.all([
-    db.clothingCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, include: { sizeScale: true } }),
+    db.clothingCategory.findMany({ where: { OR: [{ active: true }, ...(currentCategoryId ? [{ id: currentCategoryId }] : [])] }, orderBy: { sortOrder: "asc" }, include: { sizeScale: true } }),
     db.quotaGroup.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     db.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
