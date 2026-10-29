@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { getAllSettings } from "@/modules/settings/server/settings";
 import { requirePagePermission } from "@/server/actor";
+import { mailConfigured } from "@/server/mail";
 import { db } from "@/server/db";
 import { SettingsClient } from "./settings-client";
 
@@ -18,6 +19,11 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Einstellungen" description="Systemweite Regeln. Jede Änderung wird mit Begründung im Audit Log protokolliert." />
       <SettingsClient settings={settings.map((s) => ({ key: s.key, label: s.label, value: s.value as never }))} />
+      {!mailConfigured() && (
+        <p className="text-sm text-muted-foreground">
+          Mailversand ist noch nicht eingerichtet: Mindestbestands-Mails werden erst verschickt, wenn SMTP_HOST und die Zugangsdaten in der .env eingetragen sind.
+        </p>
+      )}
       <div className="grid gap-6 md:grid-cols-2">
         <section className="space-y-2">
           <h2 className="font-medium">Lagerorte</h2>

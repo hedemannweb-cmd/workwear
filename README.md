@@ -34,7 +34,7 @@ Architektur und fachliche Entscheidungen stehen in [docs/KONZEPT.md](docs/KONZEP
 | **Rückgabe/Umtausch** | Rückgabe ins Lager (nur ungetragen), Reklamation, Abschreibung, Größentausch ohne doppelte Kontingentbelastung |
 | **Bestellungen** | Bedarf aus Mitarbeiteranforderungen, Sammelbestellung je Lieferant, Lagerbestellung mit Bestellvorschlag (nie automatisch versendet), CSV-Export für den Lieferanten |
 | **Wareneingang** | Teillieferungen, FIFO-Zuteilung an Mitarbeiter (mit Split), Direktausgabe oder reservierte Einlagerung |
-| **Lager** | Bestand je Variante × Lagerort (physisch/reserviert/frei), Mindestbestand, Zählung und Korrektur, Umlagerung, unveränderliches Bewegungsjournal |
+| **Lager** | Bestand je Variante × Lagerort (physisch/reserviert/frei), Mindestbestand mit Mail-Benachrichtigung (einmal je Unterschreitung), Zählung und Korrektur, Umlagerung, unveränderliches Bewegungsjournal |
 | **Dashboard** | Kennzahlen, Handlungsbedarf, Artikel unter Mindestbestand, Datenqualität |
 | **Administration** | Kontingentgruppen und -profile mit versionierten Jahresregeln, Lieferanten, Benutzer und Rollen (Abteilungsbeschränkung), Einstellungen, Audit Log |
 | **Suche** | ⌘K / Strg+K: fehlertolerante Suche (Name, Personalnummer, SKU, Bestellnummer) mit Kontingent-Schnellansicht |
@@ -119,6 +119,7 @@ Alle Variablen sind in [.env.example](.env.example) dokumentiert. Die wichtigste
 | `BETTER_AUTH_URL` | ja | Öffentliche URL der Anwendung (in Produktion `https://…`) |
 | `TEST_DATABASE_URL` | für Tests | Eigene Test-DB, Name endet auf `_test`; wird von Tests geleert |
 | `AUTH_SIGNIN_RATE_LIMIT` | nein | Anmeldeversuche pro Minute und IP (Standard 10) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | nein | Mailversand für die Mindestbestands-Benachrichtigung (Empfänger unter Administration → Einstellungen). Ohne `SMTP_HOST` werden keine Mails verschickt. |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | für Seed | Erster Administrator; danach aus `.env` entfernen |
 | `SEED_DEMO` | nein | `false` = keine Demodaten |
 | `POSTGRES_*`, `APP_*` | Docker | siehe `.env.example` |

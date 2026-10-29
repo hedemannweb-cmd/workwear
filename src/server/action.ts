@@ -11,9 +11,12 @@ export type ActionResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: string; code?: string; fieldErrors?: Record<string, string[]> };
 
-export async function runAction<T>(name: string, fn: () => Promise<T>): Promise<ActionResult<T>> {
+export async function runAction<T>(name: string, fn: () => Promise<T>, options: { readOnly?: boolean } = {}): Promise<ActionResult<T>> {
   try {
     const data = await fn();
+    // Nach jeder erfolgreichen Änderung (Buchung, Mindestbestand, Empfänger …) Mindestbestand-Mails prüfen.
+    // Läuft im Hintergrund und blockiert die Antwort nicht.
+    if (!options.readOnly) void import("@/modules/inventory/server/low-stock-alerts").then((m) => m.triggerLowStockCheck());
     return { ok: true, data };
   } catch (raw) {
     const e = translateDbError(raw);

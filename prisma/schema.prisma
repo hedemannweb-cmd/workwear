@@ -302,6 +302,7 @@ model ArticleVariant {
   reservations  EmployeeReservation[]
   orderItems    OrderItem[]
   receiptItems  GoodsReceiptItem[]
+  lowStockAlert LowStockAlert?
 
   /// in der SQL-Migration als NULLS NOT DISTINCT angelegt; UNIQUE(barcode) WHERE NOT NULL ebenfalls dort
   @@unique([articleId, sizeId, color], map: "ArticleVariant_article_size_color_key")
@@ -788,4 +789,14 @@ model AppSetting {
   updatedById String?
   updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: Restrict)
   updatedAt   DateTime @updatedAt
+}
+
+/// Bereits gemeldete Mindestbestands-Unterschreitung je Variante. Verhindert doppelte Mails:
+/// Die Zeile entsteht beim Versand und wird gelöscht, sobald der freie Bestand wieder über dem Mindestbestand liegt.
+model LowStockAlert {
+  articleVariantId String         @id
+  articleVariant   ArticleVariant @relation(fields: [articleVariantId], references: [id], onDelete: Restrict)
+  free             Int
+  minStock         Int
+  notifiedAt       DateTime       @default(now())
 }

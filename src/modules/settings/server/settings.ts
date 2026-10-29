@@ -15,6 +15,8 @@ const SETTINGS = {
   "quota.entryRule": { schema: z.enum(EntryRule), default: "PRORATED" as EntryRule, label: "Kontingent im Eintrittsjahr" },
   "privacy.retentionYears": { schema: z.number().int().min(1).max(30), default: 1, label: "Aufbewahrung ausgeschiedener Mitarbeiter (Jahre)" },
   "issue.responsibleCancelSameDayOnly": { schema: z.boolean(), default: true, label: "Verantwortliche dürfen nur eigene Ausgaben am selben Tag stornieren" },
+  "notifications.lowStockRecipients": { schema: z.array(z.email("Ungültige E-Mail-Adresse")).max(20), default: [] as string[], label: "Mindestbestand: Mail-Empfänger" },
+  "notifications.lowStockNotifyManagers": { schema: z.boolean(), default: true, label: "Mindestbestand: Mail auch an alle Manager" },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

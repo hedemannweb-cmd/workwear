@@ -65,5 +65,5 @@ export async function stockOrderCandidatesAction(supplierId: string) {
   return runAction("stockOrderCandidates", async () => {
     assertCan(await requireActor(), "order:manage");
     return getStockOrderCandidates(String(supplierId));
-  });
+  }, { readOnly: true });
 }
