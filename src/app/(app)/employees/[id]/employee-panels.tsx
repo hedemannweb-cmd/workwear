@@ -44,6 +44,8 @@ export function EmployeeActions(props: {
   active: boolean;
   catalog: CatalogGroup[];
   available: Record<string, number | null>;
+  /** Gruppen, die der Mindestabstand derzeit sperrt → frühester Ausgabetag (ISO) */
+  nextEligible: Record<string, string>;
   quotaGroups: Array<{ id: string; name: string }>;
   departments: Array<{ id: string; name: string }>;
   currentDepartmentId: string;
@@ -121,6 +123,7 @@ export function EmployeeActions(props: {
         employeeName={props.employeeName}
         catalog={props.catalog}
         available={props.available}
+        nextEligible={props.nextEligible}
         canOverride={props.perms.override}
       />
       <AdjustQuotaDialog open={adjustOpen} onOpenChange={setAdjustOpen} employeeId={props.employeeId} groups={props.quotaGroups} year={props.year} />

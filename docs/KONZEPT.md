@@ -217,7 +217,7 @@ Ein Preis je Variante ist bewusst optional (`ArticleVariantPrice` in Phase 2), w
 | Tabelle | Felder | Constraints und Indizes |
 |---|---|---|
 | **QuotaProfile** | id, code (z. B. `PRODUKTION_STANDARD`), name, entryRule? `enum(FULL, PRORATED, MANUAL)` (überschreibt die globale Einstellung), active | UNIQUE(code) |
-| **QuotaRule** | id, quotaProfileId, quotaGroupId, **validFromYear**, validToYear?, quantityPerYear, createdById, createdAt | UNIQUE(quotaProfileId, quotaGroupId, validFromYear); CHECK(quantityPerYear ≥ 0); CHECK(validToYear ≥ validFromYear) |
+| **QuotaRule** | id, quotaProfileId, quotaGroupId, **validFromYear**, validToYear?, quantityPerYear, **minIntervalMonths?**, createdById, createdAt | UNIQUE(quotaProfileId, quotaGroupId, validFromYear); CHECK(quantityPerYear ≥ 0); CHECK(validToYear ≥ validFromYear); CHECK(minIntervalMonths > 0) |
 | **EmployeeQuotaAdjustment** | id, employeeId, quotaGroupId, year, quantityDelta, **reason (NOT NULL, min. 5 Zeichen)**, source `enum(MANUAL, OVERRIDE, IMPORT)`, relatedIssueId?, createdById, createdAt | IDX(employeeId, year); CHECK(quantityDelta ≠ 0) |
 | **QuotaYearLock** | employeeId, year | PK(employeeId, year). Reine Sperrzeile, siehe E.4 |
 
@@ -293,6 +293,18 @@ reserved    = Σ EmployeeReservation.quantity                   (quotaYear = Y, 
 available   = max(0, base + adjustments − issued − reserved)
 overdrawn   = base + adjustments − issued − reserved < 0        → Kennzeichnung in der UI
 ```
+**Mindestabstand (rollierend, freigegeben am 29.10.2026):** Hat die gültige Regel `minIntervalMonths` (z. B. Winterjacke 24), gilt zusätzlich:
+```
+letzter Verbrauch = jüngste nicht stornierte, kontingentrelevante Ausgabe der Gruppe (jahresübergreifend),
+                    die nicht vollständig gutgeschrieben wurde, oder eine aktive Reservierung (ab Anlage)
+nextEligibleAt    = Kalendertag des letzten Verbrauchs + n Monate (Monatsletzter, falls der Tag fehlt)
+Stichtag          = laufendes Jahr: jetzt; künftiges Jahr: 01.01.; vergangene Jahre: keine Prüfung
+Stichtag < nextEligibleAt → available = 0 (Nachweiszeile „Mindestabstand …, wieder ab …“)
+```
+- Die Frist hängt an der Person, nicht am Kalender: Neue Mitarbeiter sind sofort berechtigt (sofern die Eintrittsregel BDR-4 einen Anspruch ergibt), ab der ersten Ausgabe läuft die Frist. Feste Zweijahresblöcke wurden verworfen, weil sie z. B. Ausgaben im Dezember und im folgenden Januar erlauben würden.
+- Ein Umtausch setzt die Frist nicht neu (die Umtauschausgabe zählt nicht, die Umtausch-Gutschrift lässt die Originalausgabe weiter zählen).
+- Die Sonderfreigabe (BDR-6) übergeht die Sperre. Eine `EmployeeQuotaAdjustment` entsteht nur, soweit der Jahresanspruch nicht reicht; die Sperre selbst wird als `QUOTA_INTERVAL_OVERRIDE` auditiert.
+
 `ISSUED`-Reservierungen zählen nicht doppelt: Sie sind in `issued` enthalten, weil die Ausgabe das `reservationId` trägt. `CANCELLED` zählt nicht.
 
 ### E.2 Struktur

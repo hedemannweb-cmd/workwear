@@ -82,3 +82,16 @@ export function startOfDayInAppTz(isoDate: string): Date {
   const offsetMinutes = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
   return new Date(utcMidnight.getTime() - offsetMinutes * 60_000);
 }
+
+/**
+ * Kalenderdatum (YYYY-MM-DD) plus n Monate. Gibt es den Tag im Zielmonat nicht,
+ * gilt der Monatsletzte (31.01. + 1 Monat → 28./29.02.).
+ */
+export function addMonthsIso(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const total = y * 12 + (m - 1) + months;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}

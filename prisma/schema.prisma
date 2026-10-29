@@ -365,7 +365,7 @@ model QuotaProfile {
   departments Department[]
 }
 
-/// Jahresanspruch je Profil und Gruppe, versioniert über validFromYear/validToYear.
+/// Jahresanspruch je Profil und Gruppe (optional mit Mindestabstand), versioniert über validFromYear/validToYear.
 model QuotaRule {
   id              String       @id @default(cuid(2))
   quotaProfileId  String
@@ -375,6 +375,8 @@ model QuotaRule {
   validFromYear   Int
   validToYear     Int?
   quantityPerYear Int
+  /// rollierender Mindestabstand zwischen zwei Ausgaben der Gruppe (z. B. Winterjacke 24); NULL = keiner
+  minIntervalMonths Int?
   createdById     String?
   createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt       DateTime     @default(now())

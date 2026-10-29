@@ -17,7 +17,7 @@ export default async function QuotaAdminPage() {
     <>
       <PageHeader
         title="Kontingente"
-        description="Jahresansprüche je Kontingentprofil. Regeln sind versioniert: Änderungen gelten ab einem Jahr, vergangene Jahre bleiben unverändert."
+        description="Jahresansprüche je Kontingentprofil, optional mit Mindestabstand zwischen zwei Ausgaben. Regeln sind versioniert: Änderungen gelten ab einem Jahr, vergangene Jahre bleiben unverändert."
       />
       <QuotaAdminClient
         canEdit={can(actor, "quota:manageProfiles")}
@@ -37,6 +37,7 @@ export default async function QuotaAdminPage() {
             validFromYear: r.validFromYear,
             validToYear: r.validToYear,
             quantityPerYear: r.quantityPerYear,
+            minIntervalMonths: r.minIntervalMonths,
             createdBy: r.createdBy?.name ?? null,
             createdAt: r.createdAt.toISOString(),
           })),

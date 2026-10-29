@@ -158,3 +158,56 @@ describe("computeQuota", () => {
     expect(lines.map((l) => l.quotaGroupName)).toEqual(["T-Shirt", "Arbeitshose"]);
   });
 });
+
+describe("computeQuota – Mindestabstand (rollierend)", () => {
+  const winter = { id: "g-winter", name: "Winterjacke", sortOrder: 3, isQuotaRelevant: true };
+  const winterInput = (overrides: Partial<QuotaInput> = {}) =>
+    input({
+      year: 2027,
+      groups: [...groups, winter],
+      rules: [{ quotaGroupId: "g-winter", quantityPerYear: 1, minIntervalMonths: 24 }],
+      ...overrides,
+    });
+  const last = (date: string) => [{ quotaGroupId: "g-winter", date: d(date), label: "letzte Ausgabe A-1" }];
+
+  it("sperrt bis 24 Monate nach der letzten Ausgabe, auch im neuen Jahr mit frischem Anspruch", () => {
+    const l = line(computeQuota(winterInput({ intervalReference: d("2027-06-01"), lastConsumption: last("2026-03-10") })), "g-winter");
+    expect(l).toMatchObject({ base: 1, available: 0, availableByCount: 1, minIntervalMonths: 24 });
+    expect(l.nextEligibleAt?.toISOString()).toBe("2028-03-09T23:00:00.000Z"); // 10.03.2028, 00:00 Uhr Berlin
+    expect(remainingFor(l)).toBe(0);
+    expect(l.ledger.at(-1)).toMatchObject({ kind: "INTERVAL", effect: -1 });
+    expect(l.ledger.reduce((s, e) => s + e.effect, 0)).toBe(l.available);
+  });
+
+  it("gibt nach Ablauf der Frist wieder frei", () => {
+    const l = line(
+      computeQuota(winterInput({ year: 2028, intervalReference: d("2028-03-10"), lastConsumption: last("2026-03-10") })),
+      "g-winter",
+    );
+    expect(l).toMatchObject({ available: 1, nextEligibleAt: null });
+  });
+
+  it("neuer Mitarbeiter (Eintritt im laufenden Jahr, noch keine Ausgabe) ist sofort berechtigt", () => {
+    const l = line(computeQuota(winterInput({ entryDate: "2027-11-01", intervalReference: d("2027-11-01"), lastConsumption: [] })), "g-winter");
+    expect(l).toMatchObject({ base: 1, available: 1, nextEligibleAt: null });
+  });
+
+  it("Eintritt im November 2027: Ausgabe sofort, nächste erst ab November 2029 – nicht im Januar 2028", () => {
+    const jan2028 = line(
+      computeQuota(winterInput({ year: 2028, entryDate: "2027-11-01", intervalReference: d("2028-01-05"), lastConsumption: last("2027-11-01") })),
+      "g-winter",
+    );
+    expect(jan2028).toMatchObject({ base: 1, available: 0 });
+    expect(jan2028.nextEligibleAt?.toISOString()).toBe("2029-10-31T23:00:00.000Z");
+  });
+
+  it("ohne Stichtag (vergangene Jahre) und ohne Regelabstand keine Sperre", () => {
+    expect(line(computeQuota(winterInput({ lastConsumption: last("2026-12-01") })), "g-winter").nextEligibleAt).toBeNull();
+    const noInterval = winterInput({
+      rules: [{ quotaGroupId: "g-winter", quantityPerYear: 1 }],
+      intervalReference: d("2027-01-10"),
+      lastConsumption: last("2026-12-01"),
+    });
+    expect(line(computeQuota(noInterval), "g-winter")).toMatchObject({ available: 1, minIntervalMonths: null });
+  });
+});

@@ -4,6 +4,7 @@ import { cancelIssue, issueClothing } from "@/modules/issues/server/issue-clothi
 import { adjustQuota } from "@/modules/quotas/server/adjust-quota";
 import { getEmployeeQuota } from "@/modules/quotas/server/quota-service";
 import { cancelReservation, reserveClothing } from "@/modules/reservations/server/reservations";
+import { exchangeClothing, returnClothing } from "@/modules/returns/server/returns";
 import { changeDepartment } from "@/modules/employees/server/change-department";
 import { db } from "@/server/db";
 import { DomainError } from "@/server/errors";
@@ -372,5 +373,91 @@ describe("Kontingentregeln pflegen", () => {
       setQuotaRule(manager, { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.shirt.id, validFromYear: YEAR + 1, quantityPerYear: 8, reason: "nicht erlaubt" }),
       "FORBIDDEN",
     );
+  });
+});
+
+describe("Mindestabstand zwischen zwei Ausgaben (rollierend)", () => {
+  const MONTH = 30 * 24 * 3600 * 1000;
+
+  async function setupInterval() {
+    await db.quotaRule.updateMany({
+      where: { quotaProfileId: world.profiles.prod.id, quotaGroupId: world.groups.pants.id },
+      data: { minIntervalMonths: 24 },
+    });
+    const emp = await makeEmployee(world.departments.prod.id);
+    await stock(world, world.variants.pants52, 10);
+    await stock(world, world.variants.pants54, 10);
+    return emp;
+  }
+
+  const issuePants = (employeeId: string, variant = world.variants.pants52, override?: { reason: string }) =>
+    issueClothing(world.admin, { employeeId, clientRequestId: rid(), items: [{ articleVariantId: variant, quantity: 1 }], override });
+
+  /** Ausgabe ins Vorjahr verschieben, als wäre sie vor `months` Monaten erfolgt */
+  async function backdate(issueId: string, months: number) {
+    await db.clothingIssue.update({ where: { id: issueId }, data: { issuedAt: new Date(Date.now() - months * MONTH) } });
+    await db.clothingIssueItem.updateMany({ where: { issueId }, data: { quotaYear: YEAR - 1 } });
+  }
+
+  it("sperrt die Ausgabe trotz frischem Jahresanspruch, bis die Frist abgelaufen ist", async () => {
+    const emp = await setupInterval();
+    const first = await issuePants(emp.id);
+    await backdate(first.issueId, 13);
+
+    const l = await quotaLine(emp.id, world.groups.pants.id);
+    expect(l).toMatchObject({ base: 2, issued: 0, availableByCount: 2, available: 0, minIntervalMonths: 24 });
+    expect(l.nextEligibleAt).not.toBeNull();
+
+    await expect(issuePants(emp.id)).rejects.toSatisfy(
+      (e: unknown) => e instanceof DomainError && e.code === "QUOTA_EXCEEDED" && /Mindestabstand 24 Monate/.test(e.message),
+    );
+    await expectDomainError(
+      reserveClothing(world.admin, { employeeId: emp.id, clientRequestId: rid(), items: [{ articleVariantId: world.variants.pants52, quantity: 1 }] }),
+      "QUOTA_EXCEEDED",
+    );
+
+    await backdate(first.issueId, 25);
+    expect(await quotaLine(emp.id, world.groups.pants.id)).toMatchObject({ available: 2, nextEligibleAt: null });
+    await issuePants(emp.id);
+  });
+
+  it("neuer Mitarbeiter ohne Ausgabe ist sofort berechtigt, die zweite Ausgabe im selben Jahr ist gesperrt", async () => {
+    const emp = await setupInterval();
+    await issuePants(emp.id);
+    expect(await quotaLine(emp.id, world.groups.pants.id)).toMatchObject({ availableByCount: 1, available: 0 });
+    await expectDomainError(issuePants(emp.id), "QUOTA_EXCEEDED");
+  });
+
+  it("Sonderfreigabe übergeht die Sperre ohne zusätzliche Anpassung, wenn der Jahresanspruch reicht, und wird protokolliert", async () => {
+    const emp = await setupInterval();
+    const first = await issuePants(emp.id);
+    await backdate(first.issueId, 6);
+
+    const res = await issuePants(emp.id, world.variants.pants52, { reason: "Hose bei Arbeitsunfall zerstört" });
+    expect(await db.employeeQuotaAdjustment.count({ where: { employeeId: emp.id } })).toBe(0);
+    expect(await db.auditLog.count({ where: { action: "QUOTA_INTERVAL_OVERRIDE", entityId: res.issueId } })).toBe(1);
+    expect(await quotaLine(emp.id, world.groups.pants.id)).toMatchObject({ issued: 1, availableByCount: 1, available: 0 });
+  });
+
+  it("Umtausch setzt die Frist nicht neu, eine ungetragene Rückgabe hebt die Sperre auf", async () => {
+    const emp = await setupInterval();
+    const first = await issuePants(emp.id);
+    await backdate(first.issueId, 3);
+    const before = (await quotaLine(emp.id, world.groups.pants.id)).nextEligibleAt!;
+
+    const item = await db.clothingIssueItem.findFirstOrThrow({ where: { issueId: first.issueId } });
+    await exchangeClothing(world.admin, { employeeId: emp.id, clientRequestId: rid(), issueItemId: item.id, quantity: 1, newArticleVariantId: world.variants.pants54 });
+    expect((await quotaLine(emp.id, world.groups.pants.id)).nextEligibleAt).toEqual(before);
+
+    const second = await issuePants(emp.id, world.variants.pants52, { reason: "Zweite Hose zum Testen" });
+    const secondItem = await db.clothingIssueItem.findFirstOrThrow({ where: { issueId: second.issueId } });
+    await returnClothing(world.admin, {
+      employeeId: emp.id,
+      clientRequestId: rid(),
+      items: [{ issueItemId: secondItem.id, quantity: 1, returnType: "RETURN_TO_STOCK" }],
+      confirmUnworn: true,
+    });
+    // die zurückgegebene zweite Ausgabe zählt nicht – maßgeblich bleibt die (umgetauschte) erste
+    expect((await quotaLine(emp.id, world.groups.pants.id)).nextEligibleAt).toEqual(before);
   });
 });

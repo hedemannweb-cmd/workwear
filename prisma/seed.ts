@@ -153,12 +153,24 @@ async function createDemoData(admin: Actor, scales: Scales, password: string) {
   console.log(`✔ ${defs.length} Artikel mit ${Object.keys(v).length} Varianten, 3 Lieferanten`);
 
   // ── Kontingentprofile & Abteilungen ──
-  const profile = async (code: string, name: string, rules: Array<[string, number]>) =>
+  const profile = async (code: string, name: string, rules: Array<[group: string, qty: number, minIntervalMonths?: number]>) =>
     db.quotaProfile.create({
-      data: { code, name, rules: { create: rules.map(([group, qty]) => ({ quotaGroupId: g[group]!, validFromYear: 2024, quantityPerYear: qty, createdById: admin.userId })) } },
+      data: {
+        code,
+        name,
+        rules: {
+          create: rules.map(([group, qty, minIntervalMonths]) => ({
+            quotaGroupId: g[group]!,
+            validFromYear: 2024,
+            quantityPerYear: qty,
+            minIntervalMonths: minIntervalMonths ?? null,
+            createdById: admin.userId,
+          })),
+        },
+      },
     });
   const pProd = await profile("PRODUKTION_STANDARD", "Produktion Standard", [["TSHIRT", 5], ["POLO", 2], ["HOSE", 2], ["JACKE", 1], ["SCHUHE", 1]]);
-  const pLager = await profile("LAGER_STANDARD", "Lager Standard", [["TSHIRT", 6], ["HOSE", 3], ["SWEAT", 2], ["JACKE", 1], ["WINTER", 1], ["SCHUHE", 1]]);
+  const pLager = await profile("LAGER_STANDARD", "Lager Standard", [["TSHIRT", 6], ["HOSE", 3], ["SWEAT", 2], ["JACKE", 1], ["WINTER", 1, 24], ["SCHUHE", 1]]);
   const pVerw = await profile("VERWALTUNG_STANDARD", "Verwaltung Standard", [["POLO", 3]]);
   // ab nächstem Jahr: 6 statt 5 T-Shirts in der Produktion (zeigt die Versionierung)
   await db.quotaRule.create({ data: { quotaProfileId: pProd.id, quotaGroupId: g.TSHIRT!, validFromYear: YEAR + 1, quantityPerYear: 6, createdById: admin.userId } });
@@ -306,7 +318,7 @@ async function createDemoData(admin: Actor, scales: Scales, password: string) {
     (await reserveClothing(actor, { employeeId: empId[nr]!, clientRequestId: rid(), items: [{ articleVariantId: v[key]!, quantity }] })).reservationIds[0]!;
 
   await reserve(managerActor, "4711", "TS-001:XXL", 1); // Max Mustermann: 5 Anspruch, 2 erhalten, 1 reserviert, 2 verfügbar
-  await reserve(responsibleActor, "5101", "WJ-001:XL");
+  // 5101 hat im Vorjahr eine Winterjacke erhalten: Mindestabstand 24 Monate sperrt eine neue bis Januar nächsten Jahres
   await reserve(responsibleActor, "5104", "WJ-001:XXL");
   await reserve(responsibleActor, "5101", "SS-001:45");
   await reserve(managerActor, "4715", "AH-001:56", 1);

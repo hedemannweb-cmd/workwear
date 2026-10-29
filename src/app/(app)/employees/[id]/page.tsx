@@ -56,11 +56,15 @@ export default async function EmployeeDetailPage(props: PageProps<"/employees/[i
   const available = Object.fromEntries(
     catalog.map((g) => [g.id, g.isQuotaRelevant ? (currentQuota.find((q) => q.quotaGroupId === g.id)?.available ?? 0) : null]),
   );
+  const nextEligible = Object.fromEntries(
+    currentQuota.flatMap((q) => (q.nextEligibleAt ? [[q.quotaGroupId, q.nextEligibleAt.toISOString()] as const] : [])),
+  );
   const freeByVariant = new Map(catalog.flatMap((g) => g.articles.flatMap((a) => a.variants.map((v) => [v.id, v.free] as const))));
   const today = toIsoDateInAppTz(new Date());
 
   const quotaRows: QuotaRow[] = quota.map((q) => ({
     ...q,
+    nextEligibleAt: q.nextEligibleAt ? q.nextEligibleAt.toISOString() : null,
     ledger: q.ledger.map((e) => ({ date: e.date ? e.date.toISOString() : null, kind: e.kind, effect: e.effect, label: e.label })),
   }));
 
@@ -139,6 +143,7 @@ export default async function EmployeeDetailPage(props: PageProps<"/employees/[i
             active={active}
             catalog={entitledCatalog}
             available={available}
+            nextEligible={nextEligible}
             quotaGroups={quotaGroups}
             departments={options.departments}
             currentDepartmentId={employee.departmentId}

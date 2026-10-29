@@ -1,4 +1,5 @@
 import type { EntryRule } from "@/generated/prisma/enums";
+import { addMonthsIso, formatDate, startOfDayInAppTz, toIsoDateInAppTz } from "@/lib/dates";
 import { entitlementForYear } from "./proration";
 
 /**
@@ -10,6 +11,9 @@ import { entitlementForYear } from "./proration";
  *
  * Alle Eingaben beziehen sich auf genau ein Kontingentjahr. Das Laden und Filtern übernimmt
  * der QuotaService; diese Funktion rechnet nur und erzeugt den nachvollziehbaren Nachweis.
+ *
+ * Mindestabstand (QuotaRule.minIntervalMonths): Liegt der letzte Verbrauch der Gruppe (jahresübergreifend)
+ * weniger als n Monate vor dem Stichtag, ist bis zum Fristende nichts verfügbar – unabhängig vom Jahresanspruch.
  */
 
 export type QuotaGroupInfo = {
@@ -26,19 +30,26 @@ export type QuotaInput = {
   entryRule: EntryRule;
   profile: { code: string; name: string } | null;
   groups: QuotaGroupInfo[];
-  /** Jahresanspruch laut gültiger Regel je Gruppe */
-  rules: Array<{ quotaGroupId: string; quantityPerYear: number }>;
+  /** Jahresanspruch laut gültiger Regel je Gruppe, optional mit rollierendem Mindestabstand */
+  rules: Array<{ quotaGroupId: string; quantityPerYear: number; minIntervalMonths?: number | null }>;
   adjustments: Array<{ id: string; quotaGroupId: string; quantityDelta: number; date: Date; reason: string; source: string }>;
   issues: Array<{ issueId: string; issueNumber: string; quotaGroupId: string; quantity: number; date: Date; label: string }>;
   returnCredits: Array<{ returnId: string; returnNumber: string; quotaGroupId: string; credit: number; date: Date; label: string }>;
   reservations: Array<{ id: string; quotaGroupId: string; quantity: number; date: Date; status: string; label: string }>;
+  /**
+   * Stichtag für den Mindestabstand (laufendes Jahr: jetzt, künftiges Jahr: 01.01.).
+   * Fehlt er (vergangene Jahre), wird kein Mindestabstand angewendet.
+   */
+  intervalReference?: Date;
+  /** jüngster Verbrauch je Gruppe über alle Jahre (Ausgabe oder aktive Reservierung) */
+  lastConsumption?: Array<{ quotaGroupId: string; date: Date; label: string }>;
   /** Gruppen, die auch ohne Regel oder Buchung als Zeile erscheinen sollen (z. B. für eine Prüfung) */
   includeGroupIds?: string[];
 };
 
 export type QuotaLedgerEntry = {
   date: Date | null;
-  kind: "BASE" | "ADJUSTMENT" | "ISSUE" | "RETURN_CREDIT" | "RESERVATION";
+  kind: "BASE" | "ADJUSTMENT" | "ISSUE" | "RETURN_CREDIT" | "RESERVATION" | "INTERVAL";
   /** Wirkung auf das verfügbare Kontingent (Anspruch/Anpassung positiv, Verbrauch negativ) */
   effect: number;
   label: string;
@@ -59,11 +70,17 @@ export type QuotaLine = {
   available: number | null;
   /** true, wenn mehr verbraucht/reserviert ist als Anspruch + Anpassungen (z. B. nach Abteilungswechsel) */
   overdrawn: boolean;
+  /** Mindestabstand in Monaten laut Regel, null = keiner */
+  minIntervalMonths: number | null;
+  /** gesetzt, solange der Mindestabstand eine Ausgabe sperrt: frühester nächster Ausgabetag */
+  nextEligibleAt: Date | null;
+  /** verfügbar ohne Berücksichtigung des Mindestabstands (z. B. für die Höhe einer Sonderfreigabe) */
+  availableByCount: number | null;
   ledger: QuotaLedgerEntry[];
 };
 
 export function computeQuota(input: QuotaInput): QuotaLine[] {
-  const ruleByGroup = new Map(input.rules.map((r) => [r.quotaGroupId, r.quantityPerYear]));
+  const ruleByGroup = new Map(input.rules.map((r) => [r.quotaGroupId, r]));
 
   // Gruppen anzeigen, für die es eine Regel oder irgendeine Buchung im Jahr gibt.
   const relevantGroupIds = new Set<string>([
@@ -83,8 +100,9 @@ export function computeQuota(input: QuotaInput): QuotaLine[] {
   return lines;
 }
 
-function computeLine(input: QuotaInput, group: QuotaGroupInfo, ruleQuantity: number | undefined): QuotaLine {
+function computeLine(input: QuotaInput, group: QuotaGroupInfo, rule: QuotaInput["rules"][number] | undefined): QuotaLine {
   const ledger: QuotaLedgerEntry[] = [];
+  const ruleQuantity = rule?.quantityPerYear;
 
   let base = 0;
   let baseExplanation: string;
@@ -140,6 +158,24 @@ function computeLine(input: QuotaInput, group: QuotaGroupInfo, ruleQuantity: num
   });
 
   const raw = base + adjustments - issued - reserved;
+  const availableByCount = group.isQuotaRelevant ? Math.max(0, raw) : null;
+
+  const minIntervalMonths = group.isQuotaRelevant ? (rule?.minIntervalMonths ?? null) : null;
+  let nextEligibleAt: Date | null = null;
+  const last = input.lastConsumption?.find((c) => c.quotaGroupId === group.id);
+  if (minIntervalMonths && input.intervalReference && last) {
+    const until = startOfDayInAppTz(addMonthsIso(toIsoDateInAppTz(last.date), minIntervalMonths));
+    if (input.intervalReference < until) {
+      nextEligibleAt = until;
+      ledger.push({
+        date: null,
+        kind: "INTERVAL",
+        effect: -(availableByCount ?? 0),
+        label: `Mindestabstand ${minIntervalMonths} Monate: ${last.label} am ${formatDate(last.date)}, wieder ab ${formatDate(until)}`,
+      });
+    }
+  }
+
   return {
     quotaGroupId: group.id,
     quotaGroupName: group.name,
@@ -150,8 +186,11 @@ function computeLine(input: QuotaInput, group: QuotaGroupInfo, ruleQuantity: num
     adjustments,
     issued,
     reserved,
-    available: group.isQuotaRelevant ? Math.max(0, raw) : null,
+    available: nextEligibleAt ? 0 : availableByCount,
     overdrawn: group.isQuotaRelevant && raw < 0,
+    minIntervalMonths,
+    nextEligibleAt,
+    availableByCount,
     ledger,
   };
 }

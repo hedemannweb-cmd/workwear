@@ -1,5 +1,5 @@
 import "server-only";
-import { currentYear, isoFromDateOnly, toIsoDateInAppTz } from "@/lib/dates";
+import { currentYear, formatDate, isoFromDateOnly, startOfDayInAppTz, toIsoDateInAppTz } from "@/lib/dates";
 import { getSetting } from "@/modules/settings/server/settings";
 import { db } from "@/server/db";
 import { DomainError, notFound } from "@/server/errors";
@@ -70,7 +70,7 @@ export async function getEmployeeQuota(
             OR: [{ validToYear: null }, { validToYear: { gte: year } }],
           },
           orderBy: { validFromYear: "desc" },
-          select: { quotaGroupId: true, quantityPerYear: true },
+          select: { quotaGroupId: true, quantityPerYear: true, minIntervalMonths: true },
         })
       : Promise.resolve([]),
     () => client.quotaGroup.findMany({ select: { id: true, name: true, sortOrder: true, isQuotaRelevant: true } }),
@@ -110,8 +110,17 @@ export async function getEmployeeQuota(
   ] as const);
 
   // Pro Gruppe gilt die Regel mit dem jüngsten validFromYear (Liste ist absteigend sortiert).
-  const effectiveRules = new Map<string, number>();
-  for (const r of rules) if (!effectiveRules.has(r.quotaGroupId)) effectiveRules.set(r.quotaGroupId, r.quantityPerYear);
+  const effectiveRules = new Map<string, { quantityPerYear: number; minIntervalMonths: number | null }>();
+  for (const r of rules) if (!effectiveRules.has(r.quotaGroupId)) effectiveRules.set(r.quotaGroupId, r);
+
+  // Mindestabstand: nur für das laufende und künftige Jahre; vergangene Jahre sind abgeschlossen.
+  const now = new Date();
+  const thisYear = currentYear(now);
+  const intervalGroupIds = [...effectiveRules].filter(([, r]) => r.minIntervalMonths).map(([id]) => id);
+  const intervalReference = year < thisYear ? undefined : year === thisYear ? now : startOfDayInAppTz(`${year}-01-01`);
+  const lastConsumption = intervalReference && intervalGroupIds.length
+    ? await lastConsumptionByGroup(client, employeeId, intervalGroupIds)
+    : [];
 
   const variantLabel = (v: { color: string | null; article: { name: string }; size: { value: string } | null }) =>
     [v.article.name, v.color, v.size?.value].filter(Boolean).join(" ");
@@ -130,7 +139,9 @@ export async function getEmployeeQuota(
     entryRule: profile?.entryRule ?? globalEntryRule,
     profile: profile ? { code: profile.code, name: profile.name } : null,
     groups,
-    rules: [...effectiveRules].map(([quotaGroupId, quantityPerYear]) => ({ quotaGroupId, quantityPerYear })),
+    rules: [...effectiveRules].map(([quotaGroupId, r]) => ({ quotaGroupId, quantityPerYear: r.quantityPerYear, minIntervalMonths: r.minIntervalMonths })),
+    intervalReference,
+    lastConsumption,
     adjustments: adjustments.map((a) => ({
       id: a.id,
       quotaGroupId: a.quotaGroupId,
@@ -168,6 +179,48 @@ export async function getEmployeeQuota(
 }
 
 /**
+ * Jüngster Verbrauch je Gruppe über alle Kontingentjahre, Grundlage für den rollierenden Mindestabstand.
+ * - Zählt: nicht stornierte, kontingentrelevante Ausgaben, die nicht vollständig gutgeschrieben wurden,
+ *   sowie aktive Reservierungen (ab Anlage).
+ * - Ein Umtausch setzt die Frist nicht neu: Die Umtauschausgabe zählt nicht, und die Umtausch-Gutschrift
+ *   lässt die Originalausgabe weiter zählen.
+ */
+async function lastConsumptionByGroup(client: Client, employeeId: string, quotaGroupIds: string[]) {
+  const [issueItems, reservations] = [
+    await client.clothingIssueItem.findMany({
+      where: {
+        quotaGroupId: { in: quotaGroupIds },
+        quotaRelevant: true,
+        exchangeOfReturnItemId: null,
+        issue: { employeeId, status: "COMPLETED" },
+      },
+      select: {
+        quotaGroupId: true,
+        quantity: true,
+        issue: { select: { issueNumber: true, issuedAt: true } },
+        returnItems: { select: { quotaCreditQuantity: true, returnType: true } },
+      },
+    }),
+    await client.employeeReservation.findMany({
+      where: { employeeId, quotaGroupId: { in: quotaGroupIds }, status: { in: [...ACTIVE_RESERVATION_STATUSES] } },
+      select: { quotaGroupId: true, createdAt: true },
+    }),
+  ];
+
+  const latest = new Map<string, { quotaGroupId: string; date: Date; label: string }>();
+  const consider = (quotaGroupId: string, date: Date, label: string) => {
+    const cur = latest.get(quotaGroupId);
+    if (!cur || cur.date < date) latest.set(quotaGroupId, { quotaGroupId, date, label });
+  };
+  for (const i of issueItems) {
+    const credited = i.returnItems.filter((r) => r.returnType !== "EXCHANGE").reduce((s, r) => s + r.quotaCreditQuantity, 0);
+    if (i.quantity - credited > 0) consider(i.quotaGroupId, i.issue.issuedAt, `letzte Ausgabe ${i.issue.issueNumber}`);
+  }
+  for (const r of reservations) consider(r.quotaGroupId, r.createdAt, "offene Reservierung");
+  return [...latest.values()];
+}
+
+/**
  * Prüft unter bereits gehaltener Kontingentsperre, ob `quantity` Stück der Gruppe verbraucht werden dürfen.
  * Wirft QUOTA_EXCEEDED mit verständlicher Meldung.
  */
@@ -178,6 +231,19 @@ export async function assertQuotaAvailable(
   const lines = await getEmployeeQuota(params.employeeId, params.year, { tx, includeGroupIds: [params.quotaGroupId] });
   const line = lines.find((l) => l.quotaGroupId === params.quotaGroupId)!;
   const remaining = remainingFor(line);
+  if (params.quantity > remaining && line.nextEligibleAt) {
+    throw new DomainError(
+      "QUOTA_EXCEEDED",
+      `„${line.quotaGroupName}“ gibt es frühestens wieder ab ${formatDate(line.nextEligibleAt)} (Mindestabstand ${line.minIntervalMonths} Monate).`,
+      {
+        available: 0,
+        availableByCount: line.availableByCount ?? 0,
+        requested: params.quantity,
+        quotaGroupId: params.quotaGroupId,
+        nextEligibleAt: line.nextEligibleAt.toISOString(),
+      },
+    );
+  }
   if (params.quantity > remaining) {
     throw new DomainError(
       "QUOTA_EXCEEDED",

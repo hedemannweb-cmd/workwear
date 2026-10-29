@@ -28,6 +28,8 @@ export const quotaRuleSchema = z.object({
   quotaGroupId: z.string().min(1),
   validFromYear: z.number().int().min(2000).max(2100),
   quantityPerYear: z.number().int().min(0).max(100),
+  /** rollierender Mindestabstand zwischen zwei Ausgaben; null = keiner */
+  minIntervalMonths: z.number().int().min(1, "Mindestens 1 Monat.").max(120, "Höchstens 120 Monate.").nullable().default(null),
   reason: z.string().trim().min(5, "Bitte eine Begründung (mind. 5 Zeichen) angeben.").max(500),
 });
 
@@ -115,7 +117,10 @@ export async function setQuotaRule(actor: Actor, raw: z.input<typeof quotaRuleSc
     });
 
     if (existing) {
-      await tx.quotaRule.update({ where: { id: existing.id }, data: { quantityPerYear: input.quantityPerYear } });
+      await tx.quotaRule.update({
+        where: { id: existing.id },
+        data: { quantityPerYear: input.quantityPerYear, minIntervalMonths: input.minIntervalMonths },
+      });
     } else {
       await tx.quotaRule.create({
         data: {
@@ -124,6 +129,7 @@ export async function setQuotaRule(actor: Actor, raw: z.input<typeof quotaRuleSc
           validFromYear: input.validFromYear,
           validToYear: next ? next.validFromYear - 1 : null,
           quantityPerYear: input.quantityPerYear,
+          minIntervalMonths: input.minIntervalMonths,
           createdById: actor.userId,
         },
       });
@@ -137,8 +143,13 @@ export async function setQuotaRule(actor: Actor, raw: z.input<typeof quotaRuleSc
       action: "QUOTA_RULE_CHANGED",
       entityType: "QuotaProfile",
       entityId: profile.id,
-      oldValue: { group: group.name, fromYear: input.validFromYear, quantityPerYear: existing?.quantityPerYear ?? previous?.quantityPerYear ?? null },
-      newValue: { group: group.name, fromYear: input.validFromYear, quantityPerYear: input.quantityPerYear },
+      oldValue: {
+        group: group.name,
+        fromYear: input.validFromYear,
+        quantityPerYear: (existing ?? previous)?.quantityPerYear ?? null,
+        minIntervalMonths: (existing ?? previous)?.minIntervalMonths ?? null,
+      },
+      newValue: { group: group.name, fromYear: input.validFromYear, quantityPerYear: input.quantityPerYear, minIntervalMonths: input.minIntervalMonths },
       reason: input.reason,
     });
   });

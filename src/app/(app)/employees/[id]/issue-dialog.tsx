@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { issueClothingAction, reserveClothingAction } from "@/modules/issues/actions";
 import type { CatalogGroup, CatalogVariant } from "@/modules/issues/server/catalog";
@@ -36,6 +37,7 @@ export function IssueDialog({
   employeeName,
   catalog,
   available,
+  nextEligible,
   canOverride,
 }: {
   open: boolean;
@@ -45,6 +47,8 @@ export function IssueDialog({
   catalog: CatalogGroup[];
   /** verfügbares Kontingent je Gruppe im laufenden Jahr (null = unbegrenzt) */
   available: Record<string, number | null>;
+  /** Gruppen, die der Mindestabstand derzeit sperrt → frühester Ausgabetag (ISO) */
+  nextEligible: Record<string, string>;
   canOverride: boolean;
 }) {
   const { run, pending } = useAction();
@@ -318,7 +322,13 @@ export function IssueDialog({
         {needsOverride && (
           <section className="space-y-2 rounded-md border border-danger-foreground/30 bg-danger p-3 text-sm text-danger-foreground" role="alert">
             <p className="font-medium">
-              Kontingent überschritten: {exceeded.map(([gid]) => catalog.find((g) => g.id === gid)?.name).join(", ")}
+              Kontingent überschritten:{" "}
+              {exceeded
+                .map(([gid]) => {
+                  const name = catalog.find((g) => g.id === gid)?.name;
+                  return nextEligible[gid] ? `${name} (Mindestabstand, wieder ab ${formatDate(nextEligible[gid])})` : name;
+                })
+                .join(", ")}
             </p>
             {orderExceeds ? (
               <p>Bestellungen über das Kontingent sind nicht möglich. Bitte zuerst das Kontingent anpassen.</p>

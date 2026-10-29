@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { saveQuotaGroupAction, saveQuotaProfileAction, setQuotaRuleAction } from "@/modules/quotas/actions";
 
 type Group = { id: string; code: string; name: string; isQuotaRelevant: boolean; sortOrder: number; active: boolean; articles: number };
-type Rule = { quotaGroupId: string; validFromYear: number; validToYear: number | null; quantityPerYear: number; createdBy: string | null; createdAt: string };
+type Rule = { quotaGroupId: string; validFromYear: number; validToYear: number | null; quantityPerYear: number; minIntervalMonths: number | null; createdBy: string | null; createdAt: string };
 type Profile = { id: string; code: string; name: string; entryRule: string | null; active: boolean; departments: string[]; rules: Rule[] };
 
 const ENTRY_RULE_LABEL: Record<string, string> = { FULL: "voller Anspruch", PRORATED: "anteilig (monatsgenau)", MANUAL: "manuell" };
@@ -102,9 +102,10 @@ export function QuotaAdminClient({
                               !r && "text-muted-foreground",
                             )}
                             title={r ? `gültig ab ${r.validFromYear}${r.createdBy ? `, angelegt von ${r.createdBy}` : ""}` : "keine Regel"}
-                            aria-label={`${g.name} ${y}: ${r?.quantityPerYear ?? 0}${editable ? " – ändern" : ""}`}
+                            aria-label={`${g.name} ${y}: ${r?.quantityPerYear ?? 0}${r?.minIntervalMonths ? `, alle ${r.minIntervalMonths} Monate` : ""}${editable ? " – ändern" : ""}`}
                           >
                             {r?.quantityPerYear ?? "–"}
+                            {r?.minIntervalMonths && <span className="ml-1 text-xs text-muted-foreground">· alle {r.minIntervalMonths} Mon.</span>}
                           </button>
                         </TableCell>
                       );
@@ -180,6 +181,7 @@ function RuleDialog({ target, onClose }: { target: { profile: Profile; group: Gr
   const { run, pending, fieldErrors } = useAction();
   const current = effective(target.profile.rules, target.group.id, target.year);
   const [qty, setQty] = useState(String(current?.quantityPerYear ?? 0));
+  const [intervalMonths, setIntervalMonths] = useState(current?.minIntervalMonths ? String(current.minIntervalMonths) : "");
   const [reason, setReason] = useState("");
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -198,6 +200,23 @@ function RuleDialog({ target, onClose }: { target: { profile: Profile; group: Gr
             <Input id="rule-qty" type="number" min={0} max={100} value={qty} onChange={(e) => setQty(e.target.value)} className="w-32" />
           </div>
           <div className="space-y-1">
+            <Label htmlFor="rule-interval">Mindestabstand zwischen zwei Ausgaben (Monate, optional)</Label>
+            <Input
+              id="rule-interval"
+              type="number"
+              min={1}
+              max={120}
+              placeholder="keiner"
+              value={intervalMonths}
+              onChange={(e) => setIntervalMonths(e.target.value)}
+              className="w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              Rollierend ab dem Ausgabedatum, jahresübergreifend – z. B. 24 für eine Winterjacke alle zwei Jahre. Neue Mitarbeiter sind sofort berechtigt.
+            </p>
+            <FieldHint error={fieldErrors.minIntervalMonths} />
+          </div>
+          <div className="space-y-1">
             <Label htmlFor="rule-reason">Begründung (Pflicht)</Label>
             <Textarea id="rule-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
             <FieldHint error={fieldErrors.reason} />
@@ -211,7 +230,7 @@ function RuleDialog({ target, onClose }: { target: { profile: Profile; group: Gr
             disabled={pending || qty === "" || reason.trim().length < 5}
             onClick={async () => {
               const res = await run(
-                () => setQuotaRuleAction({ quotaProfileId: target.profile.id, quotaGroupId: target.group.id, validFromYear: target.year, quantityPerYear: Number(qty), reason }),
+                () => setQuotaRuleAction({ quotaProfileId: target.profile.id, quotaGroupId: target.group.id, validFromYear: target.year, quantityPerYear: Number(qty), minIntervalMonths: intervalMonths === "" ? null : Number(intervalMonths), reason }),
                 { success: "Regel gespeichert." },
               );
               if (res.ok) onClose();

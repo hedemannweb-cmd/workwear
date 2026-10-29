@@ -179,13 +179,16 @@ async function issueInTx(tx: Tx, actor: Actor, input: z.output<typeof issueCloth
   }
 
   const overrideAdjustments: Array<{ quotaGroupId: string; delta: number }> = [];
+  const intervalOverrides: Array<{ quotaGroupId: string; nextEligibleAt: string }> = [];
   for (const [quotaGroupId, quantity] of demand) {
     try {
       await assertQuotaAvailable(tx, { employeeId: employee.id, year, quotaGroupId, quantity });
     } catch (e) {
       if (!(e instanceof DomainError) || e.code !== "QUOTA_EXCEEDED" || !input.override) throw e;
-      const available = Number(e.details?.available ?? 0);
-      overrideAdjustments.push({ quotaGroupId, delta: quantity - available });
+      // Beim Mindestabstand wird nur der fehlende Jahresanspruch nachgebucht; die Sperre selbst wird protokolliert.
+      if (e.details?.nextEligibleAt) intervalOverrides.push({ quotaGroupId, nextEligibleAt: String(e.details.nextEligibleAt) });
+      const available = Number(e.details?.availableByCount ?? e.details?.available ?? 0);
+      if (quantity > available) overrideAdjustments.push({ quotaGroupId, delta: quantity - available });
     }
   }
 
@@ -235,6 +238,17 @@ async function issueInTx(tx: Tx, actor: Actor, input: z.output<typeof issueCloth
       entityType: "EmployeeQuotaAdjustment",
       entityId: created.id,
       newValue: { employeeId: employee.id, quotaGroupId: adj.quotaGroupId, year, quantityDelta: adj.delta, issueNumber },
+      reason: input.override!.reason,
+    });
+  }
+
+  for (const o of intervalOverrides) {
+    await audit(tx, {
+      actorId: actor.userId,
+      action: "QUOTA_INTERVAL_OVERRIDE",
+      entityType: "ClothingIssue",
+      entityId: issue.id,
+      newValue: { employeeId: employee.id, quotaGroupId: o.quotaGroupId, nextEligibleAt: o.nextEligibleAt, issueNumber },
       reason: input.override!.reason,
     });
   }

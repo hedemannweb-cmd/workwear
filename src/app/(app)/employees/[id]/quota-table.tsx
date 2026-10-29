@@ -20,6 +20,9 @@ export type QuotaRow = {
   reserved: number;
   available: number | null;
   overdrawn: boolean;
+  minIntervalMonths: number | null;
+  /** gesetzt, solange der Mindestabstand eine Ausgabe sperrt */
+  nextEligibleAt: string | null;
   ledger: Array<{ date: string | null; kind: string; effect: number; label: string }>;
 };
 
@@ -66,6 +69,10 @@ export function QuotaTable({ rows, year }: { rows: QuotaRow[]; year: number }) {
                     <span className="text-sm text-muted-foreground">ohne Kontingent</span>
                   ) : r.overdrawn ? (
                     <StatusBadge tone="danger">überschritten</StatusBadge>
+                  ) : r.nextEligibleAt ? (
+                    <StatusBadge tone="warning">
+                      wieder ab {formatDate(r.nextEligibleAt)}
+                    </StatusBadge>
                   ) : r.available === 0 ? (
                     <StatusBadge tone="neutral" icon={null}>0</StatusBadge>
                   ) : (
@@ -108,10 +115,13 @@ export function QuotaTable({ rows, year }: { rows: QuotaRow[]; year: number }) {
                   <span className="tabular-nums">
                     {selected.quotaRelevant ? selected.available : "unbegrenzt"}
                     {selected.overdrawn && " (überschritten)"}
+                    {selected.nextEligibleAt && ` (wieder ab ${formatDate(selected.nextEligibleAt)})`}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Verfügbar = Anspruch + Anpassungen − Erhalten (abzüglich Gutschriften aus Rückgaben) − aktive Reservierungen.
+                  {selected.minIntervalMonths &&
+                    ` Zusätzlich gilt ein Mindestabstand von ${selected.minIntervalMonths} Monaten zwischen zwei Ausgaben (jahresübergreifend; ein Umtausch setzt die Frist nicht neu).`}
                 </p>
               </div>
             </>

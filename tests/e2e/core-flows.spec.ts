@@ -88,3 +88,19 @@ test("Verantwortlicher mit Abteilungs-Scope: keine fremden Mitarbeiter, keine Ad
   await expect(page.getByText("Kein Zugriff")).toBeVisible();
   await page.screenshot({ path: "test-results/screens/responsible-employees.png" });
 });
+
+test("Mindestabstand: Winterjacke im Vorjahr erhalten → gesperrt bis Fristende, Regel in der Verwaltung sichtbar", async ({ page }) => {
+  await login(page, "admin");
+  await page.goto("/admin/quotas");
+  const lager = page.getByText("Lager Standard").locator("xpath=ancestor::*[@data-slot='card'][1]");
+  await expect(lager.getByRole("row", { name: /Winterjacke/ }).first()).toContainText("alle 24 Mon.");
+
+  await page.goto("/employees");
+  await page.getByText("Richter, Kevin").click();
+  const row = page.getByRole("row", { name: /Winterjacke/ }).first();
+  await expect(row.getByRole("cell").nth(5)).toHaveText(/wieder ab \d{2}\.01\.\d{4}/);
+  await row.click();
+  await expect(page.getByText(/Mindestabstand 24 Monate: letzte Ausgabe/)).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/quota-interval.png" });
+  await page.keyboard.press("Escape");
+});
