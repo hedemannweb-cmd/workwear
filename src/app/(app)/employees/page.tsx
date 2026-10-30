@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { listEmployees } from "@/modules/employees/server/employees";
@@ -18,13 +18,22 @@ export default async function EmployeesPage() {
         title="Mitarbeiter"
         description={`${employees.filter((e) => e.status === "ACTIVE").length} aktiv · ${employees.length} gesamt${actor.departmentIds ? " (nur Ihre Abteilungen)" : ""}`}
         actions={
-          can(actor, "employee:manage") && (
-            <Button asChild>
-              <Link href="/employees/new">
-                <Plus className="size-4" /> Neuer Mitarbeiter
-              </Link>
-            </Button>
-          )
+          <>
+            {can(actor, "employee:import") && (
+              <Button variant="outline" asChild>
+                <Link href="/employees/import">
+                  <FileSpreadsheet className="size-4" /> Excel-Import
+                </Link>
+              </Button>
+            )}
+            {can(actor, "employee:manage") && (
+              <Button asChild>
+                <Link href="/employees/new">
+                  <Plus className="size-4" /> Neuer Mitarbeiter
+                </Link>
+              </Button>
+            )}
+          </>
         }
       />
       <EmployeeTable

@@ -5,7 +5,7 @@ import { type Actor, assertCan, assertEmployeeInScope, employeeScopeWhere, isDep
 import { audit, diff } from "@/server/audit";
 import { db } from "@/server/db";
 import { DomainError, forbidden, notFound } from "@/server/errors";
-import { runInTransaction } from "@/server/tx";
+import { runInTransaction, type Tx } from "@/server/tx";
 
 import { employeeSchema, type EmployeeInput } from "../schemas";
 
@@ -52,18 +52,24 @@ export async function createEmployee(actor: Actor, raw: EmployeeInput) {
   return runInTransaction(async (tx) => {
     const dept = await tx.department.findUnique({ where: { id: input.departmentId } });
     if (!dept?.active) throw new DomainError("VALIDATION", "Die Abteilung ist nicht aktiv.");
-    const entryDate = dateOnly(input.entryDate);
-    const employee = await tx.employee.create({
-      data: {
-        ...input,
-        entryDate,
-        exitDate: input.exitDate ? dateOnly(input.exitDate) : null,
-        departmentHistory: { create: { departmentId: input.departmentId, validFrom: entryDate, changedById: actor.userId, reason: "Anlage" } },
-      },
-    });
-    await audit(tx, { actorId: actor.userId, action: "EMPLOYEE_CREATED", entityType: "Employee", entityId: employee.id, newValue: redactPersonal(input) });
-    return employee;
+    return insertEmployee(tx, actor.userId, input, "Anlage");
   });
+}
+
+/** Legt einen bereits geprüften Mitarbeiter samt Abteilungshistorie und Audit-Eintrag an (auch für den Excel-Import). */
+export async function insertEmployee(tx: Tx, actorId: string, input: z.output<typeof employeeSchema>, reason: string) {
+  const entryDate = dateOnly(input.entryDate);
+  const employee = await tx.employee.create({
+    data: {
+      ...input,
+      entryDate,
+      exitDate: input.exitDate ? dateOnly(input.exitDate) : null,
+      departmentHistory: { create: { departmentId: input.departmentId, validFrom: entryDate, changedById: actorId, reason } },
+    },
+  });
+  const newValue = reason === "Anlage" ? redactPersonal(input) : { ...redactPersonal(input), source: reason };
+  await audit(tx, { actorId, action: "EMPLOYEE_CREATED", entityType: "Employee", entityId: employee.id, newValue });
+  return employee;
 }
 
 /**

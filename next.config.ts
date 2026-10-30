@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Zugriff auf den Dev-Server von anderen Geräten im Netzwerk (z. B. "192.168.1.20,mac-mini.local")
   allowedDevOrigins: process.env.ALLOWED_DEV_ORIGINS?.split(",").filter(Boolean),
+  // Excel-Import von Mitarbeitern lädt die Datei per Server Action hoch (Standardgrenze 1 MB)
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   "dashboard:view",
   "employee:view",
   "employee:manage",
+  "employee:import",
   "employee:editSizes",
   "employee:changeDepartment",
   "quota:view",
@@ -57,6 +58,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<ConfigurableRole, readonly Permiss
     "dashboard:view",
     "employee:view",
     "employee:manage",
+    "employee:import",
     "employee:editSizes",
     "employee:changeDepartment",
     "quota:view",
@@ -104,6 +106,7 @@ export const PERMISSION_GROUPS: { label: string; permissions: { key: Permission;
     permissions: [
       { key: "employee:view", label: "Mitarbeiter ansehen" },
       { key: "employee:manage", label: "Mitarbeiter anlegen, bearbeiten, pseudonymisieren" },
+      { key: "employee:import", label: "Mitarbeiter per Excel importieren" },
       { key: "employee:editSizes", label: "Größen pflegen" },
       { key: "employee:changeDepartment", label: "Abteilung wechseln" },
       { key: "department:manage", label: "Abteilungen verwalten" },
